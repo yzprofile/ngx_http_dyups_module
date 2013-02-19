@@ -221,7 +221,7 @@ ngx_http_dyups_interface_do_get(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_dyups_interface_read_body(ngx_http_request_t *r)
 {
-    ngx_int_t               rc;
+    ngx_int_t  rc;
 
     rc = ngx_http_read_client_request_body(r, ngx_http_dyups_body_handler);
 
@@ -382,31 +382,31 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
         value = line[i].elts;
         if (ngx_strncmp(value[0].data, "server", 6) == 0) {
 
-	    us = ngx_array_push(uscf->servers);
-	    if (us == NULL) {
-		return NGX_ERROR;
-	    }
+            us = ngx_array_push(uscf->servers);
+            if (us == NULL) {
+                return NGX_ERROR;
+            }
 
-	    ngx_memzero(us, sizeof(ngx_http_upstream_server_t));
+            ngx_memzero(us, sizeof(ngx_http_upstream_server_t));
 
-	    u.url = value[1];
-	    u.default_port = 80;
+            u.url = value[1];
+            u.default_port = 80;
 
-	    /* TODO: parse ip*/
-	    if (ngx_parse_url(duscf->pool, &u) != NGX_OK) {
-		if (u.err) {
-		    ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
-				       "%s in upstream \"%V\"", u.err, &u.url);
-		}
+            /* TODO: parse ip*/
+            if (ngx_parse_url(duscf->pool, &u) != NGX_OK) {
+                if (u.err) {
+                    ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
+                                       "%s in upstream \"%V\"", u.err, &u.url);
+                }
 
-		return NGX_ERROR;
-	    }
+                return NGX_ERROR;
+            }
 
-	    us->addrs = u.addrs;
-	    us->naddrs = u.naddrs;
-	    us->weight = 1;
-	    us->max_fails = 1;
-	    us->fail_timeout = 10;
+            us->addrs = u.addrs;
+            us->naddrs = u.naddrs;
+            us->weight = 1;
+            us->max_fails = 1;
+            us->fail_timeout = 10;
 
         }
     }
@@ -417,10 +417,10 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     cf.log = ngx_cycle->log;
 
     init = uscf->peer.init_upstream ? uscf->peer.init_upstream:
-	ngx_http_upstream_init_round_robin;
+        ngx_http_upstream_init_round_robin;
 
     if (init(&cf, uscf) != NGX_OK) {
-	return NGX_ERROR;
+        return NGX_ERROR;
     }
 
     return NGX_OK;
@@ -512,13 +512,13 @@ ngx_dyups_update_upstream(ngx_str_t *name, ngx_uint_t flag, ngx_log_t *log)
         ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0,
                        "upstream matched %V", name);
 
-	if (ngx_dyups_reinit_upstream(duscf, name, i) != NGX_OK) {
+        if (ngx_dyups_reinit_upstream(duscf, name, i) != NGX_OK) {
 
-	    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0,
-			   "upstream %V reinit error", name);
+            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0,
+                           "upstream %V reinit error", name);
 
-	    return NULL;
-	}
+            return NULL;
+        }
 
         return duscf;
     }
@@ -767,7 +767,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
 
     pool = ngx_create_pool(128, ngx_cycle->log);
     if (pool == NULL) {
-	return NGX_ERROR;
+        return NGX_ERROR;
     }
 
     rc = NGX_OK;
@@ -778,29 +778,29 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
 
         /* TODO */
 
-	if (line[i].nelts != 2) {
-	    rc = NGX_ERROR;
-	    goto finish;
-	}
-
-        if (ngx_strncmp(value[0].data, "server", 6) != 0) {
-	    rc = NGX_ERROR;
-	    goto finish;
+        if (line[i].nelts != 2) {
+            rc = NGX_ERROR;
+            goto finish;
         }
 
-	u.url = value[1];
-	u.default_port = 80;
+        if (ngx_strncmp(value[0].data, "server", 6) != 0) {
+            rc = NGX_ERROR;
+            goto finish;
+        }
 
-	if (ngx_parse_url(pool, &u) != NGX_OK) {
+        u.url = value[1];
+        u.default_port = 80;
 
-	    if (u.err) {
-		ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
-			      "%s in upstream \"%V\"", u.err, &u.url);
-	    }
+        if (ngx_parse_url(pool, &u) != NGX_OK) {
 
-	    rc = NGX_ERROR;
-	    goto finish;
-	}
+            if (u.err) {
+                ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
+                              "%s in upstream \"%V\"", u.err, &u.url);
+            }
+
+            rc = NGX_ERROR;
+            goto finish;
+        }
 
     }
 
