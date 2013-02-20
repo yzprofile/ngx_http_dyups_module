@@ -3,20 +3,17 @@
 #include <ngx_http.h>
 
 
-#define NGX_HTTP_DYUPS_UPSTREAM_ADD     0x0001
-#define NGX_HTTP_DYUPS_UPSTREAM_DELETE  0x0002
-
-
 typedef struct {
     ngx_flag_t                     dynamic;
+    ngx_flag_t                     deleted;
     ngx_pool_t                    *pool;
     ngx_http_upstream_srv_conf_t  *upstream;
 } ngx_http_dyups_srv_conf_t;
 
 
 typedef struct {
-    ngx_flag_t       enable;
-    ngx_array_t      dy_upstreams;   /* ngx_http_dyups_srv_conf_t */
+    ngx_flag_t                     enable;
+    ngx_array_t                    dy_upstreams;/* ngx_http_dyups_srv_conf_t */
 } ngx_http_dyups_main_conf_t;
 
 
@@ -43,11 +40,11 @@ static ngx_int_t ngx_http_dyups_do_put(ngx_http_request_t *r,
     ngx_array_t *resource, ngx_array_t *arglist, ngx_str_t *rv);
 static ngx_int_t ngx_http_dyups_do_delete(ngx_http_request_t *r,
     ngx_array_t *resource, ngx_array_t *arglist, ngx_str_t *rv);
-static ngx_http_dyups_srv_conf_t *ngx_dyups_update_upstream(
-    ngx_str_t *name, ngx_uint_t flag, ngx_log_t *log);
+static ngx_http_dyups_srv_conf_t *ngx_dyups_find_upstream(ngx_str_t *name,
+    ngx_int_t *idx);
 static ngx_int_t ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf,
     ngx_array_t *arglist);
-static ngx_int_t ngx_dyups_reinit_upstream(ngx_http_dyups_srv_conf_t *duscf,
+static ngx_int_t ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf,
     ngx_str_t *name, ngx_uint_t index);
 static ngx_int_t ngx_http_dyups_check_commands(ngx_array_t *arglist);
 
@@ -186,6 +183,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
         duscf->dynamic = (uscfp[i]->no_port == 1
                           && uscfp[i]->port == 0
                           && uscfp[i]->flags & NGX_HTTP_UPSTREAM_CREATE);
+        duscf->deleted = 0;
 
     }
 
@@ -308,9 +306,17 @@ static ngx_int_t
 ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     ngx_array_t *arglist, ngx_str_t *rv)
 {
-    ngx_int_t                   rc;
-    ngx_str_t                  *value, name;
-    ngx_http_dyups_srv_conf_t  *duscf;
+    ngx_int_t                       rc, idx;
+    ngx_str_t                      *value, name;
+    ngx_http_dyups_srv_conf_t      *duscf;
+    ngx_http_dyups_main_conf_t     *dumcf;
+    ngx_http_upstream_srv_conf_t  **uscfp;
+    ngx_http_upstream_main_conf_t  *umcf;
+
+    umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
+                                               ngx_http_upstream_module);
+    dumcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
+                                                ngx_http_dyups_module);
 
     if (resource->nelts != 2) {
         ngx_str_set(rv, "not support this interface");
@@ -335,13 +341,40 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
         return NGX_HTTP_NOT_ALLOWED;
     }
 
-    duscf = ngx_dyups_update_upstream(&name,
-                                     NGX_HTTP_DYUPS_UPSTREAM_ADD,
-                                     r->connection->log);
-    if (duscf == NULL) {
-        ngx_str_set(rv, "add upstream error");
+    duscf = ngx_dyups_find_upstream(&name, &idx);
+
+    if (idx == -1) {
+        /* need create a new upstream */
+
+        duscf = ngx_array_push(&dumcf->dy_upstreams);
+        if (duscf == NULL) {
+            ngx_str_set(rv, "out of memory");
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+
+        uscfp = ngx_array_push(&umcf->upstreams);
+        if (uscfp == NULL) {
+            ngx_str_set(rv, "out of memory");
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+
+        ngx_memzero(duscf, sizeof(ngx_http_dyups_srv_conf_t));
+        idx = umcf->upstreams.nelts - 1;
+    }
+
+    if (duscf->deleted) {
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "upstream reuse");
+    }
+
+    rc = ngx_dyups_init_upstream(duscf, &name, idx);
+
+    if (rc != NGX_OK) {
+        ngx_str_set(rv, "failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
+    /* init upstream */
 
     rc = ngx_dyups_add_server(duscf, arglist);
     if (rc != NGX_OK) {
@@ -396,7 +429,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             if (ngx_parse_url(duscf->pool, &u) != NGX_OK) {
                 if (u.err) {
                     ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
-                                       "%s in upstream \"%V\"", u.err, &u.url);
+                                  "%s in upstream \"%V\"", u.err, &u.url);
                 }
 
                 return NGX_ERROR;
@@ -407,7 +440,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             us->weight = 1;
             us->max_fails = 1;
             us->fail_timeout = 10;
-
         }
     }
 
@@ -440,6 +472,7 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource,
     ngx_array_t *arglist, ngx_str_t *rv)
 {
     ngx_str_t                  *value, name;
+    ngx_int_t                   dumy;
     ngx_http_dyups_srv_conf_t  *duscf;
 
     if (resource->nelts != 2) {
@@ -459,13 +492,14 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource,
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "delete upstream name: %V", &name);
 
-    duscf = ngx_dyups_update_upstream(&name,
-                                     NGX_HTTP_DYUPS_UPSTREAM_DELETE,
-                                     r->connection->log);
+    duscf = ngx_dyups_find_upstream(&name, &dumy);
+
     if (duscf == NULL) {
-        ngx_str_set(rv, "delete upstream error");
+        ngx_str_set(rv, "not found uptream");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
+    duscf->deleted = 1;
 
     /* TODO: delete from upstream array */
 
@@ -476,27 +510,32 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource,
 
 
 static ngx_http_dyups_srv_conf_t *
-ngx_dyups_update_upstream(ngx_str_t *name, ngx_uint_t flag, ngx_log_t *log)
+ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
 {
-    void                           *mconf;
-    ngx_uint_t                      i, m;
-    ngx_conf_t                      cf;
-    ngx_http_module_t              *module;
-    ngx_http_conf_ctx_t            *ctx;
-    ngx_http_dyups_srv_conf_t      *duscfs, *duscf;
+    ngx_uint_t                      i;
+    ngx_http_dyups_srv_conf_t      *duscfs, *duscf, *duscf_del;
     ngx_http_dyups_main_conf_t     *dumcf;
-    ngx_http_upstream_srv_conf_t   *uscf, **uscfp;
+    ngx_http_upstream_srv_conf_t   *uscf;
     ngx_http_upstream_main_conf_t  *umcf;
 
     umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
                                                ngx_http_upstream_module);
     dumcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
                                                 ngx_http_dyups_module);
+    *idx = -1;
+    duscf_del = NULL;
+
     duscfs = dumcf->dy_upstreams.elts;
     for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
 
         duscf = &duscfs[i];
         if (!duscf->dynamic) {
+            continue;
+        }
+
+        if (duscf->deleted) {
+            *idx = i;
+            duscf_del = duscf;
             continue;
         }
 
@@ -509,119 +548,17 @@ ngx_dyups_update_upstream(ngx_str_t *name, ngx_uint_t flag, ngx_log_t *log)
             continue;
         }
 
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0,
-                       "upstream matched %V", name);
-
-        if (ngx_dyups_reinit_upstream(duscf, name, i) != NGX_OK) {
-
-            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0,
-                           "upstream %V reinit error", name);
-
-            return NULL;
-        }
+        *idx = i;
 
         return duscf;
     }
 
-    /* TODO: DELETE */
-
-    if (flag != NGX_HTTP_DYUPS_UPSTREAM_ADD) {
-
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0,
-                       "upstream not find %V", name);
-
-        return NULL;
-    }
-
-    /* NGX_HTTP_DYUPS_UPSTREAM_ADD */
-
-    duscf = ngx_array_push(&dumcf->dy_upstreams);
-    if (duscf == NULL) {
-        return NULL;
-    }
-
-    duscf->pool = ngx_create_pool(128, ngx_cycle->log);
-    if (duscf->pool == NULL) {
-        return NULL;
-    }
-
-    uscf = ngx_pcalloc(duscf->pool, sizeof(ngx_http_upstream_srv_conf_t));
-    if (uscf == NULL) {
-        return NULL;
-    }
-
-    uscfp = ngx_array_push(&umcf->upstreams);
-    if (uscfp == NULL) {
-        return NULL;
-    }
-
-    uscf->flags = NGX_HTTP_UPSTREAM_CREATE
-                 |NGX_HTTP_UPSTREAM_WEIGHT
-                 |NGX_HTTP_UPSTREAM_MAX_FAILS
-                 |NGX_HTTP_UPSTREAM_FAIL_TIMEOUT
-                 |NGX_HTTP_UPSTREAM_DOWN
-                 |NGX_HTTP_UPSTREAM_BACKUP;
-
-    uscf->host.data = ngx_pstrdup(duscf->pool, name);
-    uscf->host.len = name->len;
-    uscf->file_name = (u_char *) "dynamic_upstream";
-    uscf->line = 0;
-    uscf->port = 0;
-    uscf->default_port = 0;
-    uscf->no_port = 1;
-
-    *uscfp = uscf;
-
-    duscf->dynamic = 1;
-    duscf->upstream = uscf;
-
-    cf.module_type = NGX_HTTP_MODULE;
-    cf.cmd_type = NGX_HTTP_MAIN_CONF;
-    cf.pool = duscf->pool;
-
-    ctx = ngx_pcalloc(duscf->pool, sizeof(ngx_http_conf_ctx_t));
-    if (ctx == NULL) {
-        return NULL;
-    }
-
-    ctx->main_conf = ((ngx_http_conf_ctx_t *)
-                      ngx_cycle->conf_ctx[ngx_http_module.index])->main_conf;
-
-    ctx->srv_conf = ngx_pcalloc(cf.pool, sizeof(void *) * ngx_http_max_module);
-    if (ctx->srv_conf == NULL) {
-        return NULL;
-    }
-
-    ctx->srv_conf[ngx_http_upstream_module.ctx_index] = uscf;
-    uscf->srv_conf = ctx->srv_conf;
-
-    for (m = 0; ngx_modules[m]; m++) {
-        if (ngx_modules[m]->type != NGX_HTTP_MODULE) {
-            continue;
-        }
-
-        if (ngx_modules[m]->index == ngx_http_core_module.index) {
-            continue;
-        }
-
-        module = ngx_modules[m]->ctx;
-
-        if (module->create_srv_conf) {
-            mconf = module->create_srv_conf(&cf);
-            if (mconf == NULL) {
-                return NGX_CONF_ERROR;
-            }
-
-            ctx->srv_conf[ngx_modules[m]->ctx_index] = mconf;
-        }
-    }
-
-    return duscf;
+    return duscf_del;
 }
 
 
 static ngx_int_t
-ngx_dyups_reinit_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
+ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ngx_uint_t index)
 {
     void                           *mconf;
@@ -636,7 +573,10 @@ ngx_dyups_reinit_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
                                                ngx_http_upstream_module);
     uscfp = umcf->upstreams.elts;
 
-    ngx_destroy_pool(duscf->pool);
+    if (duscf->pool) {
+        ngx_destroy_pool(duscf->pool);
+    }
+
     duscf->pool = ngx_create_pool(128, ngx_cycle->log);
 
     uscf = duscf->upstream;
