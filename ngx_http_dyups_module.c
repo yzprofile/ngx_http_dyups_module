@@ -272,7 +272,6 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
         goto finish;
     }
 
-    /* TODO: delete from upstream array */
     ngx_str_set(&rv, "success");
     status = NGX_HTTP_OK;
 
@@ -452,6 +451,7 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     if (duscf->deleted) {
         ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "upstream reuse");
+        duscf->deleted = 0;
     }
 
     rc = ngx_dyups_init_upstream(duscf, &name, idx);
@@ -704,6 +704,31 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 static ngx_int_t
 ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 {
+    ngx_uint_t                     i;
+    ngx_conf_t                     cf;
+    ngx_http_upstream_init_pt      init;
+    ngx_http_upstream_server_t    *us;
+    ngx_http_upstream_srv_conf_t  *uscf;
+
+    uscf = duscf->upstream;
+
+    us = uscf->servers->elts;
+    for (i = 0; i < uscf->servers->nelts; i++) {
+        us[i].down = 1;
+    }
+
+    cf.pool = duscf->pool;
+    cf.module_type = NGX_HTTP_MODULE;
+    cf.cmd_type = NGX_HTTP_MAIN_CONF;
+    cf.log = ngx_cycle->log;
+
+    init = uscf->peer.init_upstream ? uscf->peer.init_upstream:
+        ngx_http_upstream_init_round_robin;
+
+    if (init(&cf, uscf) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
     duscf->deleted = 1;
 
     return NGX_OK;
