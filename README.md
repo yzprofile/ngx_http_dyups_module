@@ -57,7 +57,7 @@
     }
 
 ## STATUS [method] GET
-(`developing`)
+`(developing)`
 - /detail  返回所有upstream和server
 - /list  返回所有upstream列表
 - /upstream/name  返回当前upstream的server信息
@@ -67,7 +67,6 @@
 - [body] server ip:port
 
 ## DELETE [method] DELETE
-(`developing`)
 - /upstream/name
 
 # Example
