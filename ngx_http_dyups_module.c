@@ -17,6 +17,20 @@ typedef struct {
 } ngx_http_dyups_main_conf_t;
 
 
+typedef struct {
+    ngx_uint_t                          count;
+    ngx_http_upstream_init_peer_pt      init;
+} ngx_http_dyups_upstream_srv_conf_t;
+
+
+typedef struct {
+    void                                *data;
+    ngx_http_dyups_upstream_srv_conf_t  *scf;
+    ngx_event_get_peer_pt                get;
+    ngx_event_free_peer_pt               free;
+} ngx_http_dyups_ctx_t;
+
+
 static ngx_int_t ngx_http_dyups_init(ngx_conf_t *cf);
 static void *ngx_http_dyups_create_main_conf(ngx_conf_t *cf);
 static char *ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf);
@@ -49,6 +63,12 @@ static ngx_int_t ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf,
     ngx_str_t *name, ngx_uint_t index);
 static ngx_int_t ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf);
 static ngx_int_t ngx_http_dyups_check_commands(ngx_array_t *arglist);
+static ngx_int_t ngx_http_dyups_init_peer(ngx_http_request_t *r,
+    ngx_http_upstream_srv_conf_t *us);
+static void *ngx_http_dyups_create_srv_conf(ngx_conf_t *cf);
+static ngx_int_t ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data);
+static void ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
+    ngx_uint_t state);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -71,7 +91,7 @@ static ngx_http_module_t  ngx_http_dyups_module_ctx = {
     ngx_http_dyups_create_main_conf,  /* create main configuration */
     ngx_http_dyups_init_main_conf,    /* init main configuration */
 
-    NULL,                             /* create server configuration */
+    ngx_http_dyups_create_srv_conf,   /* create server configuration */
     NULL,                             /* merge server configuration */
 
     NULL,                             /* create location configuration */
@@ -141,6 +161,24 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
     dmcf->enable = dmcf->enable == NGX_CONF_UNSET ? 0 : 1;
 
     return NGX_CONF_OK;
+}
+
+
+static void *
+ngx_http_dyups_create_srv_conf(ngx_conf_t *cf)
+{
+    ngx_http_dyups_upstream_srv_conf_t  *conf;
+
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_dyups_upstream_srv_conf_t));
+    if (conf == NULL) {
+        return NULL;
+    }
+
+    /*
+      conf->init = NULL;
+    */
+
+    return conf;
 }
 
 
@@ -224,7 +262,7 @@ ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
     if (rc != NGX_OK) {
         return rc;
     }
-    
+
     return NGX_HTTP_OK;
 }
 
@@ -478,14 +516,15 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
 static ngx_int_t
 ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 {
-    ngx_url_t                      u;
-    ngx_str_t                     *value;
-    ngx_conf_t                     cf;
-    ngx_uint_t                     i;
-    ngx_array_t                   *line;
-    ngx_http_upstream_init_pt      init;
-    ngx_http_upstream_server_t    *us;
-    ngx_http_upstream_srv_conf_t  *uscf;
+    ngx_url_t                            u;
+    ngx_str_t                           *value;
+    ngx_conf_t                           cf;
+    ngx_uint_t                           i;
+    ngx_array_t                         *line;
+    ngx_http_upstream_init_pt            init;
+    ngx_http_upstream_server_t          *us;
+    ngx_http_upstream_srv_conf_t        *uscf;
+    ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
     uscf = duscf->upstream;
 
@@ -541,6 +580,11 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     if (init(&cf, uscf) != NGX_OK) {
         return NGX_ERROR;
     }
+
+    dscf = uscf->srv_conf[ngx_http_dyups_module.ctx_index];
+    dscf->init = uscf->peer.init;
+
+    uscf->peer.init = ngx_http_dyups_init_peer;
 
     return NGX_OK;
 }
@@ -789,8 +833,6 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
         return NGX_ERROR;
     }
 
-    rc = NGX_OK;
-
     line = arglist->elts;
     for (i = 0; i < arglist->nelts; i++) {
         value = line[i].elts;
@@ -822,6 +864,8 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
         }
 
     }
+
+    rc = NGX_OK;
 
 finish:
     ngx_destroy_pool(pool);
@@ -1226,4 +1270,69 @@ ngx_http_dyups_parse_path(ngx_http_request_t *r)
 #endif
 
     return array;
+}
+
+
+static ngx_int_t
+ngx_http_dyups_init_peer(ngx_http_request_t *r,
+    ngx_http_upstream_srv_conf_t *us)
+{
+    ngx_int_t                            rc;
+    ngx_http_dyups_ctx_t                *ctx;
+    ngx_http_dyups_upstream_srv_conf_t  *dscf;
+
+    dscf = us->srv_conf[ngx_http_dyups_module.ctx_index];
+
+    rc = dscf->init(r, us);
+
+    if (rc != NGX_OK) {
+        return rc;
+    }
+
+    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_dyups_ctx_t));
+    if (ctx == NULL) {
+        return NGX_ERROR;
+    }
+
+    ctx->scf = dscf;
+    ctx->data = r->upstream->peer.data;
+    ctx->get = r->upstream->peer.get;
+    ctx->free = r->upstream->peer.free;
+
+    r->upstream->peer.data = ctx;
+    r->upstream->peer.get = ngx_http_dyups_get_peer;
+    r->upstream->peer.free = ngx_http_dyups_free_peer;
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
+{
+    ngx_http_dyups_ctx_t  *ctx = data;
+
+    ctx->scf->count++;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "dynamic upstream get handler count %i",
+                   ctx->scf->count);
+
+    return ctx->get(pc, ctx->data);
+}
+
+
+static void
+ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
+    ngx_uint_t state)
+{
+    ngx_http_dyups_ctx_t  *ctx = data;
+
+    ctx->scf->count--;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "dynamic upstream free handler count %i",
+                   ctx->scf->count);
+
+    ctx->free(pc, ctx->data, state);
 }
