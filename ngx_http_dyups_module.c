@@ -3,9 +3,14 @@
 #include <ngx_http.h>
 
 
+#define NGX_DYUPS_DELETING 1
+#define NGX_DYUPS_DELETED  2
+
+
 typedef struct {
+    ngx_uint_t                    *count;
     ngx_flag_t                     dynamic;
-    ngx_flag_t                     deleted;
+    ngx_uint_t                     deleted;
     ngx_pool_t                    *pool;
     ngx_http_upstream_srv_conf_t  *upstream;
 } ngx_http_dyups_srv_conf_t;
@@ -622,7 +627,20 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
             continue;
         }
 
-        if (duscf->deleted) {
+        if (duscf->deleted == NGX_DYUPS_DELETING && *(duscf->count) == 0) {
+            if (duscf->pool) {
+
+                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                               "free dynamic upstream");
+
+                ngx_destroy_pool(duscf->pool);
+                duscf->pool = NULL;
+            }
+
+            duscf->deleted = NGX_DYUPS_DELETED;
+        }
+
+        if (duscf->deleted == NGX_DYUPS_DELETED) {
             *idx = i;
             duscf_del = duscf;
             continue;
@@ -634,6 +652,11 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
             || ngx_strncasecmp(uscf->host.data, name->data, uscf->host.len)
                != 0)
         {
+            continue;
+        }
+
+        if (*(duscf->count) != 0) {
+            (void) ngx_dyups_delete_upstream(duscf);
             continue;
         }
 
@@ -657,6 +680,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ngx_http_conf_ctx_t            *ctx;
     ngx_http_upstream_srv_conf_t   *uscf, **uscfp;
     ngx_http_upstream_main_conf_t  *umcf;
+    ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
     umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
                                                ngx_http_upstream_module);
@@ -739,6 +763,9 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
         }
     }
 
+    dscf = uscf->srv_conf[ngx_http_dyups_module.ctx_index];
+    duscf->count = &dscf->count;
+
     return NGX_OK;
 }
 
@@ -770,10 +797,12 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
         ngx_http_upstream_init_round_robin;
 
     if (init(&cf, uscf) != NGX_OK) {
+        ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
+                      "delete upstream error when call init");
         return NGX_ERROR;
     }
 
-    duscf->deleted = 1;
+    duscf->deleted = NGX_DYUPS_DELETING;
 
     return NGX_OK;
 }
