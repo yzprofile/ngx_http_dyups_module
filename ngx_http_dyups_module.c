@@ -666,8 +666,6 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
         ngx_destroy_pool(duscf->pool);
     }
 
-    duscf->pool = ngx_create_pool(128, ngx_cycle->log);
-
     uscf = duscf->upstream;
 
     duscf->pool = ngx_create_pool(128, ngx_cycle->log);
@@ -760,6 +758,8 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
     }
+
+    ngx_str_set(&uscf->host, "_dyups_upstream_down_host_");
 
     cf.pool = duscf->pool;
     cf.module_type = NGX_HTTP_MODULE;
