@@ -691,7 +691,7 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
             continue;
         }
 
-        if (*(duscf->count) != 0) {
+        if (duscf->count != NULL && *(duscf->count) != 0) {
             (void) ngx_dyups_delete_upstream(duscf);
             continue;
         }
