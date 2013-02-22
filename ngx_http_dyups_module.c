@@ -281,6 +281,11 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
     ngx_chain_t                 out;
     ngx_http_dyups_srv_conf_t  *duscf;
 
+    rc = ngx_http_discard_request_body(r);
+    if (rc != NGX_OK) {
+        return rc;
+    }
+
     if (resource->nelts != 2) {
         ngx_str_set(&rv, "not support this interface");
         status = NGX_HTTP_NOT_ALLOWED;
@@ -673,13 +678,13 @@ static ngx_int_t
 ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ngx_uint_t index)
 {
-    void                           *mconf;
-    ngx_uint_t                      m;
-    ngx_conf_t                      cf;
-    ngx_http_module_t              *module;
-    ngx_http_conf_ctx_t            *ctx;
-    ngx_http_upstream_srv_conf_t   *uscf, **uscfp;
-    ngx_http_upstream_main_conf_t  *umcf;
+    void                                *mconf;
+    ngx_uint_t                           m;
+    ngx_conf_t                           cf;
+    ngx_http_module_t                   *module;
+    ngx_http_conf_ctx_t                 *ctx;
+    ngx_http_upstream_srv_conf_t        *uscf, **uscfp;
+    ngx_http_upstream_main_conf_t       *umcf;
     ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
     umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
