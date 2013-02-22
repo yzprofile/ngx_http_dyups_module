@@ -261,14 +261,39 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
 {
-    ngx_int_t  rc;
+    ngx_int_t   rc;
+    ngx_str_t  *value;
 
     rc = ngx_http_discard_request_body(r);
     if (rc != NGX_OK) {
         return rc;
     }
 
-    return NGX_HTTP_OK;
+    if (resource->nelts == 0) {
+        return NGX_HTTP_NOT_FOUND;
+    }
+
+    value = resource->elts;
+
+    if (value[0].len == 4
+        && ngx_strncasecmp(value[0].data, (u_char *) "list", 4))
+    {
+        return NGX_OK;
+    }
+
+    if (value[0].len == 6
+        && ngx_strncasecmp(value[0].data, (u_char *) "detail", 6))
+    {
+        return NGX_OK;
+    }
+
+    if (value[0].len == 8
+        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8))
+    {
+        return NGX_OK;
+    }
+
+    return NGX_HTTP_NOT_FOUND;
 }
 
 
@@ -294,7 +319,9 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
 
     value = resource->elts;
 
-    if (ngx_strncmp(value[0].data, "upstream", 8) != 0) {
+    if (value[0].len == 8
+        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) != 0)
+    {
         ngx_str_set(&rv, "not support this api");
         status = NGX_HTTP_NOT_ALLOWED;
         goto finish;
@@ -459,7 +486,9 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
 
     value = resource->elts;
 
-    if (ngx_strncmp(value[0].data, "upstream", 8) != 0) {
+    if (value[0].len == 8
+        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) != 0)
+    {
         ngx_str_set(rv, "not support this api");
         return NGX_HTTP_NOT_FOUND;
     }
@@ -549,7 +578,9 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     line = arglist->elts;
     for (i = 0; i < arglist->nelts; i++) {
         value = line[i].elts;
-        if (ngx_strncmp(value[0].data, "server", 6) == 0) {
+        if (value[0].len == 6
+            && ngx_strncasecmp(value[0].data, (u_char *) "server", 6) == 0)
+        {
 
             us = ngx_array_push(uscf->servers);
             if (us == NULL) {
@@ -878,7 +909,9 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
             goto finish;
         }
 
-        if (ngx_strncmp(value[0].data, "server", 6) != 0) {
+        if (value[0].len == 6 &&
+            ngx_strncasecmp(value[0].data, (u_char *) "server", 6) != 0)
+        {
             rc = NGX_ERROR;
             goto finish;
         }
