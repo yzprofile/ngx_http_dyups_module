@@ -64,7 +64,7 @@
 - /upstream/name
 
 # Example
-'''bash
+```bash
         » curl -H "host: dyhost" 127.0.0.1:8080
         <html>
         <head><title>502 Bad Gateway</title></head>
@@ -103,4 +103,4 @@
 
         host2
         server 127.0.0.1:8089
-'''
+```
