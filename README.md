@@ -1,5 +1,7 @@
 # developing
 
+目前仅支持单worker模式
+
 ## Config Example
 
     daemon off;
@@ -22,15 +24,8 @@
         server {
             listen   8080;
 
-            location /1 {
+            location / {
                 proxy_pass http://$host;
-            }
-
-            location /2 {
-                proxy_pass http://$host;
-            }
-            location /3 {
-                proxy_pass http://127.0.0.1:8089;    
             }
         }
 
@@ -57,7 +52,6 @@
     }
 
 ## STATUS [method] GET
-`(developing)`
 - /detail  返回所有upstream和server
 - /list  返回所有upstream列表
 - /upstream/name  返回当前upstream的server信息
@@ -71,7 +65,7 @@
 
 # Example
 
-	» curl -H "host: dyhost" 127.0.0.1:8080/1
+	» curl -H "host: dyhost" 127.0.0.1:8080
 	<html>
 	<head><title>502 Bad Gateway</title></head>
 	<body bgcolor="white">
@@ -83,8 +77,8 @@
 	» curl -d "server 127.0.0.1:8089;server 127.0.0.1:8088;" 127.0.0.1:8081/upstream/dyhost
 	success
 
-	» curl -H "host: dyhost" 127.0.0.1:8080/1
+	» curl -H "host: dyhost" 127.0.0.1:8080
 	8089
 
-	» curl -H "host: dyhost" 127.0.0.1:8080/1
+	» curl -H "host: dyhost" 127.0.0.1:8080
 	8088
