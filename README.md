@@ -10,7 +10,7 @@
     events {
     }
 
-    http 
+    http
     {
 
         upstream host1 {
@@ -65,20 +65,41 @@
 
 # Example
 
-	» curl -H "host: dyhost" 127.0.0.1:8080
-	<html>
-	<head><title>502 Bad Gateway</title></head>
-	<body bgcolor="white">
-	<center><h1>502 Bad Gateway</h1></center>
-	<hr><center>nginx/1.3.13</center>
-	</body>
-	</html>
+        » curl -H "host: dyhost" 127.0.0.1:8080
+        <html>
+        <head><title>502 Bad Gateway</title></head>
+        <body bgcolor="white">
+        <center><h1>502 Bad Gateway</h1></center>
+        <hr><center>nginx/1.3.13</center>
+        </body>
+        </html>
 
-	» curl -d "server 127.0.0.1:8089;server 127.0.0.1:8088;" 127.0.0.1:8081/upstream/dyhost
-	success
+        » curl -d "server 127.0.0.1:8089;server 127.0.0.1:8088;" 127.0.0.1:8081/upstream/dyhost
+        success
 
-	» curl -H "host: dyhost" 127.0.0.1:8080
-	8089
+        » curl -H "host: dyhost" 127.0.0.1:8080
+        8089
 
-	» curl -H "host: dyhost" 127.0.0.1:8080
-	8088
+        » curl -H "host: dyhost" 127.0.0.1:8080
+        8088
+
+        » curl 127.0.0.1:8081/detail
+        host1
+        server 127.0.0.1:8088
+
+        host2
+        server 127.0.0.1:8089
+
+        dyhost
+        server 127.0.0.1:8089
+        server 127.0.0.1:8088
+
+        » curl -i -X DELETE 127.0.0.1:8081/upstream/dyhost
+        success
+
+        » curl 127.0.0.1:8081/detail
+        host1
+        server 127.0.0.1:8088
+
+        host2
+        server 127.0.0.1:8089

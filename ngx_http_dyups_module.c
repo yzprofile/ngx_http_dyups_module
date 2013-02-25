@@ -229,8 +229,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
         }
 
         duscf->upstream = uscfp[i];
-        duscf->dynamic = (uscfp[i]->no_port == 1
-                          && uscfp[i]->port == 0
+        duscf->dynamic = (uscfp[i]->port == 0
                           && uscfp[i]->flags & NGX_HTTP_UPSTREAM_CREATE);
         duscf->deleted = 0;
 
@@ -948,7 +947,6 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     uscf->line = 0;
     uscf->port = 0;
     uscf->default_port = 0;
-    uscf->no_port = 1;
 
     uscfp[index] = uscf;
 
