@@ -74,7 +74,7 @@ static void *ngx_http_dyups_create_srv_conf(ngx_conf_t *cf);
 static ngx_int_t ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data);
 static void ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
     ngx_uint_t state);
-
+static ngx_buf_t *ngx_http_dyups_show_list(ngx_http_request_t *r);
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
 
@@ -261,8 +261,10 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
 {
-    ngx_int_t   rc;
-    ngx_str_t  *value;
+    ngx_int_t    rc, status;
+    ngx_buf_t   *buf;
+    ngx_str_t   *value;
+    ngx_chain_t  out;
 
     rc = ngx_http_discard_request_body(r);
     if (rc != NGX_OK) {
@@ -273,27 +275,117 @@ ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
         return NGX_HTTP_NOT_FOUND;
     }
 
+    buf = NULL;
     value = resource->elts;
 
     if (value[0].len == 4
-        && ngx_strncasecmp(value[0].data, (u_char *) "list", 4))
+        && ngx_strncasecmp(value[0].data, (u_char *) "list", 4) == 0)
     {
-        return NGX_OK;
+        buf = ngx_http_dyups_show_list(r);
+        if (buf == NULL) {
+            status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+            goto finish;
+        }
     }
 
     if (value[0].len == 6
-        && ngx_strncasecmp(value[0].data, (u_char *) "detail", 6))
+        && ngx_strncasecmp(value[0].data, (u_char *) "detail", 6) == 0)
     {
-        return NGX_OK;
+        buf = ngx_http_dyups_show_list(r);
+        if (buf == NULL) {
+            status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+            goto finish;
+        }
     }
 
     if (value[0].len == 8
-        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8))
+        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) == 0)
     {
-        return NGX_OK;
+        buf = ngx_http_dyups_show_list(r);
+        if (buf == NULL) {
+            status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+            goto finish;
+        }
     }
 
-    return NGX_HTTP_NOT_FOUND;
+    status = buf ? NGX_HTTP_OK : NGX_HTTP_NOT_FOUND;
+
+finish:
+    r->headers_out.status = status;
+
+    if (status != NGX_HTTP_OK) {
+        r->headers_out.content_length_n = 0;
+    }
+
+    rc = ngx_http_send_header(r);
+    if (rc == NGX_ERROR || rc > NGX_OK) {
+        return rc;
+    }
+
+    if (status != NGX_HTTP_OK) {
+        return ngx_http_send_special(r, NGX_HTTP_FLUSH);
+    }
+
+    buf->last_buf = 1;
+    out.buf = buf;
+    out.next = NULL;
+
+    return ngx_http_output_filter(r, &out);
+}
+
+
+static ngx_buf_t *
+ngx_http_dyups_show_list(ngx_http_request_t *r)
+{
+    ngx_uint_t                   i, len;
+    ngx_str_t                    host;
+    ngx_buf_t                   *buf;
+    ngx_http_dyups_srv_conf_t   *duscfs, *duscf;
+    ngx_http_dyups_main_conf_t  *dumcf;
+
+    dumcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
+
+    len = 0;
+    duscfs = dumcf->dy_upstreams.elts;
+    for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
+
+        duscf = &duscfs[i];
+
+        if (!duscf->dynamic) {
+            continue;
+        }
+
+        if (duscf->deleted) {
+            continue;
+        }
+
+        len += duscf->upstream->host.len + 1;
+    }
+
+    buf = ngx_create_temp_buf(r->pool, len);
+    if (buf == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
+
+        duscf = &duscfs[i];
+
+        if (!duscf->dynamic) {
+            continue;
+        }
+
+        if (duscf->deleted) {
+            continue;
+        }
+
+        host = duscf->upstream->host;
+
+        buf->last = ngx_cpymem(buf->last, host.data, host.len);
+        buf->last = ngx_cpymem(buf->last, "\n", 1);
+    }
+
+    return buf;
 }
 
 
@@ -474,10 +566,8 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     ngx_http_upstream_srv_conf_t  **uscfp;
     ngx_http_upstream_main_conf_t  *umcf;
 
-    umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
-                                               ngx_http_upstream_module);
-    dumcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
-                                                ngx_http_dyups_module);
+    umcf = ngx_http_get_module_main_conf(r, ngx_http_upstream_module);
+    dumcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
 
     if (resource->nelts != 2) {
         ngx_str_set(rv, "not support this interface");
