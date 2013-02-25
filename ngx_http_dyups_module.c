@@ -23,8 +23,8 @@ typedef struct {
 
 
 typedef struct {
-    ngx_uint_t                          count;
-    ngx_http_upstream_init_peer_pt      init;
+    ngx_uint_t                           count;
+    ngx_http_upstream_init_peer_pt       init;
 } ngx_http_dyups_upstream_srv_conf_t;
 
 
@@ -75,6 +75,8 @@ static ngx_int_t ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data);
 static void ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
     ngx_uint_t state);
 static ngx_buf_t *ngx_http_dyups_show_list(ngx_http_request_t *r);
+static ngx_buf_t *ngx_http_dyups_show_detail(ngx_http_request_t *r);
+
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
 
@@ -291,7 +293,7 @@ ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
     if (value[0].len == 6
         && ngx_strncasecmp(value[0].data, (u_char *) "detail", 6) == 0)
     {
-        buf = ngx_http_dyups_show_list(r);
+        buf = ngx_http_dyups_show_detail(r);
         if (buf == NULL) {
             status = NGX_HTTP_INTERNAL_SERVER_ERROR;
             goto finish;
@@ -380,9 +382,69 @@ ngx_http_dyups_show_list(ngx_http_request_t *r)
         }
 
         host = duscf->upstream->host;
+        buf->last = ngx_sprintf(buf->last, "%V\n", &host);
+    }
 
-        buf->last = ngx_cpymem(buf->last, host.data, host.len);
-        buf->last = ngx_cpymem(buf->last, "\n", 1);
+    return buf;
+}
+
+
+static ngx_buf_t *
+ngx_http_dyups_show_detail(ngx_http_request_t *r)
+{
+    ngx_uint_t                   i, j, len;
+    ngx_str_t                    host;
+    ngx_buf_t                   *buf;
+    ngx_http_dyups_srv_conf_t   *duscfs, *duscf;
+    ngx_http_dyups_main_conf_t  *dumcf;
+    ngx_http_upstream_server_t  *us;
+
+    dumcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
+
+    len = 0;
+    duscfs = dumcf->dy_upstreams.elts;
+    for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
+
+        duscf = &duscfs[i];
+
+        if (!duscf->dynamic) {
+            continue;
+        }
+
+        if (duscf->deleted) {
+            continue;
+        }
+
+        len += duscf->upstream->host.len + 1;
+        len += sizeof("server ") + 80;
+    }
+
+    buf = ngx_create_temp_buf(r->pool, len);
+    if (buf == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
+
+        duscf = &duscfs[i];
+
+        if (!duscf->dynamic) {
+            continue;
+        }
+
+        if (duscf->deleted) {
+            continue;
+        }
+
+        host = duscf->upstream->host;
+        buf->last = ngx_sprintf(buf->last, "%V\n", &host);
+
+        us = duscf->upstream->servers->elts;
+        for (j = 0; j < duscf->upstream->servers->nelts; j++) {
+            buf->last = ngx_sprintf(buf->last, "server %V\n",
+                                    &us[j].addrs->name);
+        }
+        buf->last = ngx_sprintf(buf->last, "\n");
     }
 
     return buf;
