@@ -3,8 +3,10 @@
 #include <ngx_http.h>
 
 
-#define NGX_DYUPS_DELETING 1
-#define NGX_DYUPS_DELETED  2
+#define NGX_DYUPS_DELETING     1
+#define NGX_DYUPS_DELETED      2
+
+#define NGX_DYUPS_SHM_NAME_LEN 256
 
 
 typedef struct {
@@ -19,6 +21,8 @@ typedef struct {
 typedef struct {
     ngx_flag_t                     enable;
     ngx_array_t                    dy_upstreams;/* ngx_http_dyups_srv_conf_t */
+    ngx_str_t                      shm_name;
+    ngx_uint_t                     shm_size;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -34,6 +38,19 @@ typedef struct {
     ngx_event_get_peer_pt                get;
     ngx_event_free_peer_pt               free;
 } ngx_http_dyups_ctx_t;
+
+
+typedef struct ngx_dyups_shctx_s {
+    ngx_queue_t                   msg_queue;
+    /* status ? */
+} ngx_dyups_shctx_t;
+
+
+typedef struct ngx_dyups_global_ctx_s {
+    ngx_event_t                          msg_timer;
+    ngx_slab_pool_t                     *shpool;
+    ngx_dyups_shctx_t                   *sh;
+} ngx_dyups_global_ctx_t;
 
 
 static ngx_int_t ngx_http_dyups_init(ngx_conf_t *cf);
@@ -78,6 +95,11 @@ static ngx_buf_t *ngx_http_dyups_show_list(ngx_http_request_t *r);
 static ngx_buf_t *ngx_http_dyups_show_detail(ngx_http_request_t *r);
 static ngx_buf_t *ngx_http_dyups_show_upstream(ngx_http_request_t *r,
     ngx_http_dyups_srv_conf_t *duscf);
+static ngx_int_t ngx_http_dyups_init_shm_zone(ngx_shm_zone_t *shm_zone,
+    void *data);
+static char *ngx_http_dyups_init_shm(ngx_conf_t *cf, void *conf);
+static ngx_int_t ngx_http_dyups_get_shm_name(ngx_str_t *shm_name,
+    ngx_pool_t *pool, ngx_uint_t generation);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -87,6 +109,13 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       ngx_http_dyups_interface,
       0,
       0,
+      NULL },
+
+    { ngx_string("dyups_shm_zone_size"),
+      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_size_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_http_dyups_main_conf_t, shm_size),
       NULL },
 
     ngx_null_command
@@ -124,6 +153,10 @@ ngx_module_t  ngx_http_dyups_module = {
 };
 
 
+ngx_uint_t ngx_http_dyups_shm_generation = 0;
+ngx_dyups_global_ctx_t ngx_dyups_global_ctx;
+
+
 static char *
 ngx_http_dyups_interface(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -157,6 +190,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     }
 
     dmcf->enable = NGX_CONF_UNSET;
+    dmcf->shm_size = NGX_CONF_UNSET_UINT;
 
     return dmcf;
 }
@@ -169,7 +203,86 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
 
     dmcf->enable = dmcf->enable == NGX_CONF_UNSET ? 0 : 1;
 
+    if (dmcf->shm_size == NGX_CONF_UNSET_UINT) {
+        dmcf->shm_size = 2 * 1024 * 1024;
+    }
+
+    return ngx_http_dyups_init_shm(cf, conf);
+}
+
+
+static char *
+ngx_http_dyups_init_shm(ngx_conf_t *cf, void *conf)
+{
+    ngx_http_dyups_main_conf_t *dmcf = conf;
+
+    ngx_shm_zone_t  *shm_zone;
+
+    ngx_http_dyups_shm_generation++;
+
+    if (ngx_http_dyups_get_shm_name(&dmcf->shm_name, cf->pool,
+                                     ngx_http_dyups_shm_generation)
+        != NGX_OK)
+    {
+        return NGX_CONF_ERROR;
+    }
+
+    shm_zone = ngx_shared_memory_add(cf, &dmcf->shm_name, dmcf->shm_size,
+                                     &ngx_http_dyups_module);
+    if (shm_zone == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    ngx_log_error(NGX_LOG_DEBUG, cf->log, 0,
+                  "init shm:%V, size:%ui", &dmcf->shm_name,
+                  dmcf->shm_size);
+
+    shm_zone->data = cf->pool;
+    shm_zone->init = ngx_http_dyups_init_shm_zone;
+
     return NGX_CONF_OK;
+}
+
+
+static ngx_int_t
+ngx_http_dyups_get_shm_name(ngx_str_t *shm_name, ngx_pool_t *pool,
+    ngx_uint_t generation)
+{
+    u_char  *last;
+
+    shm_name->data = ngx_palloc(pool, NGX_DYUPS_SHM_NAME_LEN);
+    if (shm_name->data == NULL) {
+        return NGX_ERROR;
+    }
+
+    last = ngx_snprintf(shm_name->data, NGX_DYUPS_SHM_NAME_LEN, "%s#%ui",
+                        "ngx_http_dyups_module", generation);
+
+    shm_name->len = last - shm_name->data;
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_dyups_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
+{
+    ngx_slab_pool_t    *shpool;
+    ngx_dyups_shctx_t  *sh;
+
+    shpool = (ngx_slab_pool_t *) shm_zone->shm.addr;
+
+    sh = ngx_slab_alloc(shpool, sizeof(ngx_dyups_shctx_t));
+    if (sh == NULL) {
+        return NGX_ERROR;
+    }
+
+    ngx_dyups_global_ctx.sh = sh;
+    ngx_dyups_global_ctx.shpool = shpool;
+
+    ngx_queue_init(&sh->msg_queue);
+
+    return NGX_OK;
 }
 
 
@@ -186,7 +299,6 @@ ngx_http_dyups_create_srv_conf(ngx_conf_t *cf)
     /*
       conf->init = NULL;
     */
-
     return conf;
 }
 
