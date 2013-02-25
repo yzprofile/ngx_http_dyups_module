@@ -8,6 +8,9 @@
 
 #define NGX_DYUPS_SHM_NAME_LEN 256
 
+#define NGX_DYUPS_DELETE       1
+#define NGX_DYUPS_ADD          2
+
 
 typedef struct {
     ngx_uint_t                    *count;
@@ -52,6 +55,16 @@ typedef struct ngx_dyups_global_ctx_s {
     ngx_slab_pool_t                     *shpool;
     ngx_dyups_shctx_t                   *sh;
 } ngx_dyups_global_ctx_t;
+
+
+typedef struct ngx_dyups_msg_s {
+    ngx_queue_t                          queue;
+    ngx_str_t                            path;
+    ngx_str_t                            content;
+    ngx_int_t                            count;
+    ngx_uint_t                           flag;
+    ngx_pid_t                           *pid;
+} ngx_dyups_msg_t;
 
 
 static ngx_int_t ngx_http_dyups_init(ngx_conf_t *cf);
@@ -103,6 +116,10 @@ static ngx_int_t ngx_http_dyups_get_shm_name(ngx_str_t *shm_name,
     ngx_pool_t *pool, ngx_uint_t generation);
 static ngx_int_t ngx_http_dyups_init_process(ngx_cycle_t *cycle);
 static void ngx_http_dyups_read_msg(ngx_event_t *ev);
+static ngx_int_t ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body,
+    ngx_uint_t flag);
+static void ngx_dyups_destroy_msg(ngx_slab_pool_t *shpool,
+    ngx_dyups_msg_t *msg);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -690,6 +707,13 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
     rc = ngx_dyups_delete_upstream(duscf);
     if (rc != NGX_OK) {
         ngx_str_set(&rv, "failed");
+        status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+        goto finish;
+    }
+
+    rc = ngx_http_dyups_send_msg(&r->uri, NULL, NGX_DYUPS_DELETE);
+    if (rc != NGX_OK) {
+        ngx_str_set(&rv, "alert: delte success but not sync to other process");
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
         goto finish;
     }
@@ -1759,4 +1783,99 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
     if (!ngx_exiting && !ngx_quit) {
         ngx_add_timer(ev, dmcf->read_msg_timeout);
     }
+}
+
+
+static ngx_int_t
+ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
+{
+    ngx_core_conf_t    *ccf;
+    ngx_slab_pool_t    *shpool;
+    ngx_dyups_msg_t    *msg;
+    ngx_dyups_shctx_t  *sh;
+
+    ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                           ngx_core_module);
+
+    sh = ngx_dyups_global_ctx.sh;
+    shpool = ngx_dyups_global_ctx.shpool;
+
+    ngx_shmtx_lock(&shpool->mutex);
+
+    msg = ngx_slab_alloc_locked(shpool, sizeof(ngx_dyups_msg_t));
+    if (msg == NULL) {
+        goto failed;
+    }
+
+    ngx_memzero(msg, sizeof(ngx_dyups_msg_t));
+
+    msg->flag = flag;
+    msg->count = 0;
+    msg->pid = ngx_slab_alloc_locked(shpool, ccf->worker_processes);
+
+    if (msg->pid == NULL) {
+        goto failed;
+    }
+
+    ngx_memzero(msg->pid, sizeof(ngx_pid_t) * ccf->worker_processes);
+    msg->pid[0] = ngx_pid;
+    msg->count++;
+
+    msg->path.data = ngx_slab_alloc_locked(shpool, path->len);
+    if (msg->path.data == NULL) {
+        goto failed;
+    }
+
+    ngx_memcpy(msg->path.data, path->data, path->len);
+    msg->path.len = path->len;
+
+    if (body) {
+        msg->content.data = ngx_slab_alloc_locked(shpool,
+                                                  body->last - body->pos);
+        if (msg->content.data == NULL) {
+            goto failed;
+        }
+
+        ngx_memcpy(msg->content.data, body->pos, body->last - body->pos);
+        msg->content.len = body->last - body->pos;
+
+    } else {
+        msg->content.data = NULL;
+        msg->content.len = 0;
+    }
+
+    ngx_queue_insert_head(&sh->msg_queue, &msg->queue);
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    return NGX_OK;
+
+failed:
+
+    if (msg) {
+        ngx_dyups_destroy_msg(shpool, msg);
+    }
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    return NGX_ERROR;
+}
+
+
+static void
+ngx_dyups_destroy_msg(ngx_slab_pool_t *shpool, ngx_dyups_msg_t *msg)
+{
+    if (msg->pid) {
+        ngx_slab_free_locked(shpool, msg->pid);
+    }
+
+    if (msg->path.data) {
+        ngx_slab_free_locked(shpool, msg->path.data);
+    }
+
+    if (msg->content.data) {
+        ngx_slab_free_locked(shpool, msg->content.data);
+    }
+
+    ngx_slab_free_locked(shpool, msg);
 }
