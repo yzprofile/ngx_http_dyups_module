@@ -11,6 +11,9 @@
 #define NGX_DYUPS_DELETE       1
 #define NGX_DYUPS_ADD          2
 
+#define ngx_dyups_add_timer(ev, timeout)                                      \
+    if (!ngx_exiting && !ngx_quit) ngx_add_timer(ev, (timeout))
+
 
 typedef struct {
     ngx_uint_t                    *count;
@@ -89,8 +92,6 @@ static ngx_int_t ngx_http_dyups_do_delete(ngx_http_request_t *r,
     ngx_array_t *resource);
 static ngx_int_t ngx_http_dyups_do_post(ngx_http_request_t *r,
     ngx_array_t *resource, ngx_array_t *arglist, ngx_str_t *rv);
-static ngx_int_t ngx_http_dyups_do_put(ngx_http_request_t *r,
-    ngx_array_t *resource, ngx_array_t *arglist, ngx_str_t *rv);
 static ngx_http_dyups_srv_conf_t *ngx_dyups_find_upstream(ngx_str_t *name,
     ngx_int_t *idx);
 static ngx_int_t ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf,
@@ -120,6 +121,8 @@ static ngx_int_t ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body,
     ngx_uint_t flag);
 static void ngx_dyups_destroy_msg(ngx_slab_pool_t *shpool,
     ngx_dyups_msg_t *msg);
+ngx_int_t ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path,
+    ngx_str_t *content, ngx_uint_t flag);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -408,12 +411,19 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 static ngx_int_t
 ngx_http_dyups_interface_handler(ngx_http_request_t *r)
 {
-    ngx_array_t  *res;
+    ngx_array_t                 *res;
+    ngx_event_t                 *timer;
+    ngx_http_dyups_main_conf_t  *dmcf;
+
+    dmcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
+    timer = &ngx_dyups_global_ctx.msg_timer;
 
     res = ngx_http_dyups_parse_path(r);
     if (res == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
+    ngx_http_dyups_read_msg(timer);
 
     if (r->method == NGX_HTTP_GET) {
         return ngx_http_dyups_do_get(r, res);
@@ -778,7 +788,7 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
     if (res == NULL) {
         ngx_str_set(&rv, "out of memory");
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
-        goto failed;
+        goto finish;
     }
 
     if (r->request_body == NULL || r->request_body->bufs == NULL) {
@@ -786,7 +796,7 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "interface no content");
         ngx_str_set(&rv, "no content\n");
-        goto failed;
+        goto finish;
     }
 
     if (r->request_body->temp_file) {
@@ -802,29 +812,35 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
     if (body == NULL) {
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
         ngx_str_set(&rv, "out of memory\n");
-        goto failed;
+        goto finish;
     }
 
     arglist = ngx_dyups_parse_content(r->pool, body);
     if (arglist == NULL) {
         status = NGX_HTTP_BAD_REQUEST;
         ngx_str_set(&rv, "parse body error\n");
-        goto failed;
+        goto finish;
     }
 
     switch(r->method) {
     case NGX_HTTP_POST:
         status = ngx_http_dyups_do_post(r, res, arglist, &rv);
         break;
-    case NGX_HTTP_PUT:
-        status = ngx_http_dyups_do_put(r, res, arglist, &rv);
-        break;
     default:
         status = NGX_HTTP_NOT_ALLOWED;
         break;
     }
 
-failed:
+    if (status == NGX_HTTP_OK) {
+
+        if (ngx_http_dyups_send_msg(&r->uri, body, NGX_DYUPS_ADD)) {
+            ngx_str_set(&rv, "alert: update success "
+                        "but not sync to other process");
+            status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+    }
+
+finish:
 
     ngx_http_dyups_send_response(r, status, &rv);
 }
@@ -997,14 +1013,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     uscf->peer.init = ngx_http_dyups_init_peer;
 
     return NGX_OK;
-}
-
-
-static ngx_int_t
-ngx_http_dyups_do_put(ngx_http_request_t *r, ngx_array_t *resource,
-    ngx_array_t *arglist, ngx_str_t *rv)
-{
-    return NGX_HTTP_OK;
 }
 
 
@@ -1776,13 +1784,138 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
 static void
 ngx_http_dyups_read_msg(ngx_event_t *ev)
 {
+    ngx_int_t                    i, rc;
+    ngx_str_t                    path, content;
+    ngx_uint_t                   n;
+    ngx_pool_t                  *pool;
+    ngx_queue_t                 *q, *t;
+    ngx_array_t                  msgs;
+    ngx_core_conf_t             *ccf;
+    ngx_slab_pool_t             *shpool;
+    ngx_dyups_msg_t             *msg, *tmsg;
+    ngx_dyups_shctx_t           *sh;
     ngx_http_dyups_main_conf_t  *dmcf;
 
-    dmcf = ev->data;
+    ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                           ngx_core_module);
 
-    if (!ngx_exiting && !ngx_quit) {
-        ngx_add_timer(ev, dmcf->read_msg_timeout);
+    dmcf = ev->data;
+    sh = ngx_dyups_global_ctx.sh;
+    shpool = ngx_dyups_global_ctx.shpool;
+
+    ngx_shmtx_lock(&shpool->mutex);
+
+    if (ngx_queue_empty(&sh->msg_queue)) {
+        ngx_shmtx_unlock(&shpool->mutex);
+        ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
+        return;
     }
+
+    pool = ngx_create_pool(ngx_pagesize, ev->log);
+    if (pool == NULL) {
+        ngx_shmtx_unlock(&shpool->mutex);
+        ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
+        return;
+    }
+
+    rc = ngx_array_init(&msgs, pool, 8, sizeof(ngx_dyups_msg_t));
+
+    if (rc != NGX_OK) {
+        goto failed;
+    }
+
+
+    for (q = ngx_queue_last(&sh->msg_queue);
+         q != ngx_queue_sentinel(&sh->msg_queue);
+         q = ngx_queue_prev(q))
+    {
+        msg = ngx_queue_data(q, ngx_dyups_msg_t, queue);
+
+
+        if (msg->count == ccf->worker_processes) {
+            t = ngx_queue_next(q); ngx_queue_remove(q); q = t;
+
+            ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                                  "destroy msg %V:%V",
+                                  &msg->path, &msg->content);
+
+            ngx_dyups_destroy_msg(shpool, msg);
+            continue;
+        }
+
+        for (i = 0; i < msg->count; i++) {
+            if (msg->pid[i] == ngx_pid) {
+                break;
+            }
+        }
+
+        if (i != msg->count) {
+            continue;
+        }
+
+        msg->pid[i] = ngx_pid;
+        msg->count++;
+
+        tmsg = ngx_array_push(&msgs);
+        if (tmsg == NULL) {
+            goto failed;
+        }
+
+        tmsg->flag = msg->flag;
+
+        tmsg->path.data = ngx_pnalloc(pool, msg->path.len);
+        if (tmsg->path.data == NULL) {
+            goto failed;
+        }
+
+        ngx_memcpy(tmsg->path.data, msg->path.data, msg->path.len);
+        tmsg->path.len = msg->path.len;
+
+        tmsg->content.data = ngx_pnalloc(pool, msg->content.len);
+
+        if (tmsg->content.data == NULL) {
+            goto failed;
+        }
+
+        ngx_memcpy(tmsg->content.data, msg->content.data, msg->content.len);
+        tmsg->content.len = msg->content.len;
+    }
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    msg = msgs.elts;
+    for (n = 0; n < msgs.nelts; n++) {
+        path = msg[n].path;
+        content = msg[n].content;
+
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                       "read msg path:%V, content:%V, flag %ui",
+                       &path, &content, msg[n].flag);
+
+        rc = ngx_dyups_sync_cmd(pool, &path, &content, msg[n].flag);
+        if (rc != NGX_OK) {
+            ngx_log_error(NGX_LOG_ALERT, ev->log, 0,
+                          "read msg error, may cause the "
+                          "config inaccuracy, path:%V, content:%V",
+                          &path, &content);
+        }
+    }
+
+    ngx_destroy_pool(pool);
+
+    ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
+
+    return;
+
+failed:
+    ngx_log_error(NGX_LOG_ALERT, ev->log, 0, "read msg error, may cause the "
+                  "config inaccuracy");
+
+    ngx_destroy_pool(pool);
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
 }
 
 
@@ -1878,4 +2011,12 @@ ngx_dyups_destroy_msg(ngx_slab_pool_t *shpool, ngx_dyups_msg_t *msg)
     }
 
     ngx_slab_free_locked(shpool, msg);
+}
+
+
+ngx_int_t
+ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
+    ngx_uint_t flag)
+{
+    return NGX_OK;
 }
