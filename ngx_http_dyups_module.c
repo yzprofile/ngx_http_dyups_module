@@ -23,6 +23,7 @@ typedef struct {
     ngx_array_t                    dy_upstreams;/* ngx_http_dyups_srv_conf_t */
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
+    ngx_msec_t                     read_msg_timeout;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -41,7 +42,7 @@ typedef struct {
 
 
 typedef struct ngx_dyups_shctx_s {
-    ngx_queue_t                   msg_queue;
+    ngx_queue_t                          msg_queue;
     /* status ? */
 } ngx_dyups_shctx_t;
 
@@ -100,6 +101,8 @@ static ngx_int_t ngx_http_dyups_init_shm_zone(ngx_shm_zone_t *shm_zone,
 static char *ngx_http_dyups_init_shm(ngx_conf_t *cf, void *conf);
 static ngx_int_t ngx_http_dyups_get_shm_name(ngx_str_t *shm_name,
     ngx_pool_t *pool, ngx_uint_t generation);
+static ngx_int_t ngx_http_dyups_init_process(ngx_cycle_t *cycle);
+static void ngx_http_dyups_read_msg(ngx_event_t *ev);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -109,6 +112,13 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       ngx_http_dyups_interface,
       0,
       0,
+      NULL },
+
+    { ngx_string("dyups_read_msg_timeout"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
+      ngx_conf_set_msec_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_http_dyups_main_conf_t, read_msg_timeout),
       NULL },
 
     { ngx_string("dyups_shm_zone_size"),
@@ -144,7 +154,7 @@ ngx_module_t  ngx_http_dyups_module = {
     NGX_HTTP_MODULE,               /* module type */
     NULL,                          /* init master */
     NULL,                          /* init module */
-    NULL,                          /* init process */
+    ngx_http_dyups_init_process,   /* init process */
     NULL,                          /* init thread */
     NULL,                          /* exit thread */
     NULL,                          /* exit process */
@@ -191,6 +201,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
 
     dmcf->enable = NGX_CONF_UNSET;
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
+    dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
 
     return dmcf;
 }
@@ -202,6 +213,10 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
     ngx_http_dyups_main_conf_t  *dmcf = conf;
 
     dmcf->enable = dmcf->enable == NGX_CONF_UNSET ? 0 : 1;
+
+    if (dmcf->read_msg_timeout) {
+        dmcf->read_msg_timeout = 1000;
+    }
 
     if (dmcf->shm_size == NGX_CONF_UNSET_UINT) {
         dmcf->shm_size = 2 * 1024 * 1024;
@@ -346,6 +361,28 @@ ngx_http_dyups_init(ngx_conf_t *cf)
         duscf->deleted = 0;
 
     }
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_dyups_init_process(ngx_cycle_t *cycle)
+{
+    ngx_event_t                 *timer;
+    ngx_http_dyups_main_conf_t  *dmcf;
+
+    dmcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
+                                               ngx_http_dyups_module);
+
+    timer = &ngx_dyups_global_ctx.msg_timer;
+    ngx_memzero(timer, sizeof(ngx_event_t));
+
+    timer->handler = ngx_http_dyups_read_msg;
+    timer->log = cycle->log;
+    timer->data = dmcf;
+
+    ngx_add_timer(timer, dmcf->read_msg_timeout);
 
     return NGX_OK;
 }
@@ -1709,4 +1746,17 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
                    ctx->scf->count);
 
     ctx->free(pc, ctx->data, state);
+}
+
+
+static void
+ngx_http_dyups_read_msg(ngx_event_t *ev)
+{
+    ngx_http_dyups_main_conf_t  *dmcf;
+
+    dmcf = ev->data;
+
+    if (!ngx_exiting && !ngx_quit) {
+        ngx_add_timer(ev, dmcf->read_msg_timeout);
+    }
 }
