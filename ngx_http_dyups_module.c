@@ -1068,7 +1068,9 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
             continue;
         }
 
-        if (duscf->deleted == NGX_DYUPS_DELETING && *(duscf->count) == 0) {
+        if (duscf->deleted == NGX_DYUPS_DELETING
+            && ( duscf->count == NULL || *(duscf->count) == 0))
+        {
             if (duscf->pool) {
 
                 ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,

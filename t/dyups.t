@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(5);
+my $t = Test::Nginx->new()->plan(11);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -148,17 +148,36 @@ $rep = qr/
 host1
 host2
 /m;
-like(mhttp_get('/list', 'localhost', 8081), $rep, 'dyups hello');
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 16:51:46');
 
-like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, 'dyups hello post');
-like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, 'dyups hello');
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2013-02-26 16:51:51');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-26 16:51:54');
 
-like(mhttp_delete('/upstream/dyhost', 8081), qr/success/m, 'dyups hello delete');
-like(mhttp_get('/', 'dyhost', 8080), qr/502/m, 'dyups hello');
+$rep = qr/
+host1
+host2
+dyhost
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 17:02:13');
+
+like(mhttp_delete('/upstream/dyhost', 8081), qr/success/m, '2013-02-26 16:51:57');
+like(mhttp_get('/', 'dyhost', 8080), qr/502/m, '2013-02-26 16:52:00');
+
+$rep = qr/
+host1
+host2
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 17:00:54');
+
+like(mhttp_delete('/upstream/host1', 8081), qr/success/m, '2013-02-26 17:08:00');
+like(mhttp_get('/', 'host1', 8080), qr/502/m, '2013-02-26 17:08:04');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2013-02-26 17:05:20');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-26 17:05:30');
+
+
 
 $t->stop();
-
-
 
 ##############################################################################
 
