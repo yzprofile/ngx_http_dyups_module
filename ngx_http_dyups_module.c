@@ -83,7 +83,6 @@ static void ngx_http_dyups_body_handler(ngx_http_request_t *r);
 static ngx_array_t *ngx_dyups_parse_content(ngx_pool_t *pool, ngx_buf_t *buf);
 static ngx_int_t ngx_dyups_conf_read_token(ngx_pool_t *pool, ngx_buf_t *body,
     ngx_array_t *args);
-static ngx_array_t *ngx_http_dyups_parse_path(ngx_http_request_t *r);
 static void ngx_http_dyups_send_response(ngx_http_request_t *r,
     ngx_int_t status, ngx_str_t *content);
 static ngx_int_t ngx_http_dyups_do_get(ngx_http_request_t *r,
@@ -123,6 +122,7 @@ static void ngx_dyups_destroy_msg(ngx_slab_pool_t *shpool,
     ngx_dyups_msg_t *msg);
 ngx_int_t ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path,
     ngx_str_t *content, ngx_uint_t flag);
+static ngx_array_t *ngx_dyups_parse_path(ngx_pool_t *pool, ngx_str_t *path);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -418,7 +418,7 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
     dmcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
     timer = &ngx_dyups_global_ctx.msg_timer;
 
-    res = ngx_http_dyups_parse_path(r);
+    res = ngx_dyups_parse_path(r->pool, &r->uri);
     if (res == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -784,7 +784,7 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
     ngx_buf_t    *body;
     ngx_array_t  *arglist, *res;
 
-    res = ngx_http_dyups_parse_path(r);
+    res = ngx_dyups_parse_path(r->pool, &r->uri);
     if (res == NULL) {
         ngx_str_set(&rv, "out of memory");
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -822,13 +822,12 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         goto finish;
     }
 
-    switch(r->method) {
-    case NGX_HTTP_POST:
+    if (r->method == NGX_HTTP_POST) {
+
         status = ngx_http_dyups_do_post(r, res, arglist, &rv);
-        break;
-    default:
+
+    } else {
         status = NGX_HTTP_NOT_ALLOWED;
-        break;
     }
 
     if (status == NGX_HTTP_OK) {
@@ -1666,19 +1665,19 @@ ngx_http_dyups_read_body_from_file(ngx_http_request_t *r)
 
 
 ngx_array_t *
-ngx_http_dyups_parse_path(ngx_http_request_t *r)
+ngx_dyups_parse_path(ngx_pool_t *pool, ngx_str_t *path)
 {
     u_char       *p, *last, *end;
     ngx_str_t    *str;
     ngx_array_t  *array;
 
-    array = ngx_array_create(r->pool, 8, sizeof(ngx_str_t));
+    array = ngx_array_create(pool, 8, sizeof(ngx_str_t));
     if (array == NULL) {
         return NULL;
     }
 
-    p = r->uri.data + 1;
-    last = r->uri.data + r->uri.len;
+    p = path->data + 1;
+    last = path->data + path->len;
 
     while(p < last) {
         end = ngx_strlchr(p, last, '/');
@@ -1707,7 +1706,7 @@ ngx_http_dyups_parse_path(ngx_http_request_t *r)
 
     arg = array->elts;
     for (i = 0; i < array->nelts; i++) {
-        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                        "res[%i]:%V", i, &arg[i]);
     }
 #endif
