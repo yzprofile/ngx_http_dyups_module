@@ -1,7 +1,11 @@
 # developing
+
 TODO:
+
 1. 输入指令合法性验证
+
 2. 权重,重试失败次数等属性更新支持
+
 3. 健康检查模块支持
 
 ## Config Example
