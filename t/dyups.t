@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(1);
+my $t = Test::Nginx->new()->plan(5);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -35,6 +35,17 @@ Content-Length: $len
 $body
 EOF
 }
+
+
+sub mhttp_delete($;$;%) {
+    my ($url, $port, %extra) = @_;
+    return mhttp(<<EOF, $port, %extra);
+DELETE $url HTTP/1.0
+Host: localhost
+
+EOF
+}
+
 
 sub mrun($;$) {
     my ($self, $conf) = @_;
@@ -131,13 +142,19 @@ mrun($t);
 
 ###############################################################################
 my $rep;
+my $body;
 
 $rep = qr/
 host1
 host2
 /m;
-
 like(mhttp_get('/list', 'localhost', 8081), $rep, 'dyups hello');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, 'dyups hello post');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, 'dyups hello');
+
+like(mhttp_delete('/upstream/dyhost', 8081), qr/success/m, 'dyups hello delete');
+like(mhttp_get('/', 'dyhost', 8080), qr/502/m, 'dyups hello');
 
 $t->stop();
 
