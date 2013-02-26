@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(11);
+my $t = Test::Nginx->new()->plan(26);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -149,9 +149,22 @@ host1
 host2
 /m;
 like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 16:51:46');
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:30:07');
+like(mhttp_get('/upstream/host1', 'localhost', 8081), qr/server 127.0.0.1:8088/m, '2013-02-26 17:35:19');
+
+###############################################################################
 
 like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2013-02-26 16:51:51');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-26 16:51:54');
+like(mhttp_get('/', 'host1', 8080), qr/8088/m, '2013-02-26 17:36:42');
+like(mhttp_get('/', 'host2', 8080), qr/8089/m, '2013-02-26 17:36:46');
 
 $rep = qr/
 host1
@@ -159,6 +172,39 @@ host2
 dyhost
 /m;
 like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 17:02:13');
+
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+
+dyhost
+server 127.0.0.1:8088
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:36:59');
+
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;server 127.0.0.1:8089;', 8081), qr/success/m, '2013-02-26 17:40:24');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-26 17:40:28');
+like(mhttp_get('/', 'dyhost', 8080), qr/8089/m, '2013-02-26 17:40:32');
+like(mhttp_get('/', 'host1', 8080), qr/8088/m, '2013-02-26 17:40:36');
+like(mhttp_get('/', 'host2', 8080), qr/8089/m, '2013-02-26 17:40:39');
+
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+
+dyhost
+server 127.0.0.1:8088
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:41:09');
+
 
 like(mhttp_delete('/upstream/dyhost', 8081), qr/success/m, '2013-02-26 16:51:57');
 like(mhttp_get('/', 'dyhost', 8080), qr/502/m, '2013-02-26 16:52:00');
@@ -169,12 +215,37 @@ host2
 /m;
 like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 17:00:54');
 
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:42:27');
+
+like(mhttp_delete('/upstream/dyhost', 8081), qr/404/m, '2013-02-26 17:44:34');
+
 like(mhttp_delete('/upstream/host1', 8081), qr/success/m, '2013-02-26 17:08:00');
 like(mhttp_get('/', 'host1', 8080), qr/502/m, '2013-02-26 17:08:04');
+
+$rep = qr/
+host2
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:45:03');
 
 like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2013-02-26 17:05:20');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-26 17:05:30');
 
+$rep = qr/
+host2
+server 127.0.0.1:8089
+
+dyhost
+server 127.0.0.1:8088
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:46:03');
 
 
 $t->stop();
