@@ -967,10 +967,13 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
 static ngx_int_t
 ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 {
+    time_t                               fail_timeout;
+    unsigned                             backup;
+    ngx_int_t                            weight, max_fails;
     ngx_url_t                            u;
-    ngx_str_t                           *value;
+    ngx_str_t                           *value, s;
     ngx_conf_t                           cf;
-    ngx_uint_t                           i;
+    ngx_uint_t                           i, j;
     ngx_array_t                         *line;
     ngx_http_upstream_init_pt            init;
     ngx_http_upstream_server_t          *us;
@@ -990,9 +993,13 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     line = arglist->elts;
     for (i = 0; i < arglist->nelts; i++) {
         value = line[i].elts;
-        if (value[0].len == 6
-            && ngx_strncasecmp(value[0].data, (u_char *) "server", 6) == 0)
-        {
+
+        if (ngx_strncasecmp(value[0].data, (u_char *) "server", 6) == 0) {
+
+            backup = 0;
+            weight = 1;
+            max_fails = 1;
+            fail_timeout = 10;
 
             us = ngx_array_push(uscf->servers);
             if (us == NULL) {
@@ -1015,11 +1022,56 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
                 return NGX_ERROR;
             }
 
+            for (j = 2; j < line[i].nelts; j++) {
+
+                if (ngx_strncmp(value[j].data, "weight=", 7) == 0) {
+
+                    weight = ngx_atoi(&value[j].data[7], value[j].len - 7);
+
+                    if (weight == NGX_ERROR || weight == 0) {
+                        weight = 1;
+                    }
+
+                    continue;
+                }
+
+                if (ngx_strncmp(value[j].data, "max_fails=", 10) == 0) {
+
+                    max_fails = ngx_atoi(&value[j].data[10], value[j].len - 10);
+                    if (max_fails == NGX_ERROR) {
+                        max_fails = 1;
+                    }
+
+                    continue;
+                }
+
+                if (ngx_strncmp(value[j].data, "fail_timeout=", 13) == 0) {
+
+                    s.len = value[j].len - 13;
+                    s.data = &value[j].data[13];
+
+                    fail_timeout = ngx_parse_time(&s, 1);
+
+                    if (fail_timeout == (time_t) NGX_ERROR) {
+                        fail_timeout = 10;
+                    }
+
+                    continue;
+                }
+
+                if (ngx_strncmp(value[j].data, "backup", 6) == 0) {
+                    backup = 1;
+                    continue;
+                }
+
+            }
+
             us->addrs = u.addrs;
             us->naddrs = u.naddrs;
-            us->weight = 1;
-            us->max_fails = 1;
-            us->fail_timeout = 10;
+            us->weight = weight;
+            us->max_fails = max_fails;
+            us->fail_timeout = fail_timeout;
+            us->backup = backup;
         }
     }
 
@@ -1310,7 +1362,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
 
         /* TODO */
 
-        if (line[i].nelts != 2) {
+        if (line[i].nelts < 2) {
             rc = NGX_ERROR;
             goto finish;
         }
