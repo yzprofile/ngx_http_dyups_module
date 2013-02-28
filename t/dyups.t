@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(26);
+my $t = Test::Nginx->new()->plan(34);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -94,8 +94,7 @@ events {
     accept_mutex off;
 }
 
-http 
-{
+http {
 
     upstream host1 {
         server 127.0.0.1:8088;
@@ -113,11 +112,9 @@ http
         }
     }
     
-    limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
     server {
         listen 8088;
         location / {
-            limit_req zone=one burst=1000;
             echo 8088;
         }
     }
@@ -246,6 +243,16 @@ dyhost
 server 127.0.0.1:8088
 /m;
 like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:46:03');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088 weight=3; server 127.0.0.1:8089 weight=1;', 8081), qr/success/m, '2013-02-28 16:27:45');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:27:49');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:27:52');
+like(mhttp_get('/', 'dyhost', 8080), qr/8089/m, '2013-02-28 16:28:44');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088; server 127.0.0.1:18089 backup;', 8081), qr/success/m, '2013-02-28 16:23:41');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:23:48');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:25:32');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:25:35');
 
 
 $t->stop();
