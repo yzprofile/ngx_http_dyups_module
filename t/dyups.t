@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(34);
+my $t = Test::Nginx->new()->plan(38);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -254,6 +254,10 @@ like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:23:48');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:25:32');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-02-28 16:25:35');
 
+like(mhttp_post('/upstream/dyhost', 'ip_hash;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/success/m, '2013-03-04 15:53:41');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-04 15:53:44');
+like(mhttp_get('/', 'dyhost', 8080), qr/8089/m, '2013-03-04 15:53:46');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-04 15:53:49');
 
 $t->stop();
 

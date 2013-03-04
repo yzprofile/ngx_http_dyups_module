@@ -1110,7 +1110,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 
                     value = line[0].elts;
                     if (cmd->name.len == value[0].len
-                        && ngx_strncasecmp(cmd->name.data, value[0].data,
+                        || ngx_strncasecmp(cmd->name.data, value[0].data,
                                            value[0].len)
                         != 0)
                     {
