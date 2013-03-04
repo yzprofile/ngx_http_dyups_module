@@ -1081,7 +1081,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             cf.cmd_type = NGX_HTTP_UPS_CONF;
             cf.log = ngx_cycle->log;
             cf.ctx = duscf->ctx;
-            cf.args = &line[0];
+            cf.args = &line[i];
 
             for (j = 0; j < ngx_max_module; j++) {
                 if (ngx_modules[j]->type != NGX_HTTP_MODULE) {
@@ -1108,14 +1108,18 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
                         continue;
                     }
 
-                    value = line[0].elts;
-                    if (cmd->name.len == value[0].len
+                    value = line[i].elts;
+                    if (cmd->name.len != value[0].len
                         || ngx_strncasecmp(cmd->name.data, value[0].data,
                                            value[0].len)
                         != 0)
                     {
                         continue;
                     }
+
+                    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                                   "[dyups] set upstream \"%V\"",
+                                   &cmd->name);
 
                     if (cmd->set(&cf, cmd,
                             duscf->ctx->srv_conf[ngx_modules[j]->ctx_index])
