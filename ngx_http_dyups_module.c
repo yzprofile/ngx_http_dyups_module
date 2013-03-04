@@ -20,6 +20,7 @@ typedef struct {
     ngx_flag_t                     dynamic;
     ngx_uint_t                     deleted;
     ngx_pool_t                    *pool;
+    ngx_http_conf_ctx_t           *ctx;
     ngx_http_upstream_srv_conf_t  *upstream;
 } ngx_http_dyups_srv_conf_t;
 
@@ -948,10 +949,10 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
                    "[dyups] upstream name: %V", &name);
 
     rc = ngx_http_dyups_check_commands(arglist);
-    if (rc != NGX_OK) {
-        ngx_str_set(rv, "commands error");
-        return NGX_HTTP_NOT_ALLOWED;
-    }
+    /* if (rc != NGX_OK) { */
+    /*     ngx_str_set(rv, "commands error"); */
+    /*     return NGX_HTTP_NOT_ALLOWED; */
+    /* } */
 
     rc = ngx_dyups_do_update(&name, arglist, rv);
     if (rc != NGX_HTTP_OK) {
@@ -975,6 +976,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     ngx_conf_t                           cf;
     ngx_uint_t                           i, j;
     ngx_array_t                         *line;
+    ngx_command_t                       *cmd;
     ngx_http_upstream_init_pt            init;
     ngx_http_upstream_server_t          *us;
     ngx_http_upstream_srv_conf_t        *uscf;
@@ -1063,7 +1065,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
                     backup = 1;
                     continue;
                 }
-
             }
 
             us->addrs = u.addrs;
@@ -1072,6 +1073,60 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             us->max_fails = max_fails;
             us->fail_timeout = fail_timeout;
             us->backup = backup;
+
+        } else {
+
+            cf.pool = duscf->pool;
+            cf.module_type = NGX_HTTP_MODULE;
+            cf.cmd_type = NGX_HTTP_UPS_CONF;
+            cf.log = ngx_cycle->log;
+            cf.ctx = duscf->ctx;
+            cf.args = &line[0];
+
+            for (j = 0; j < ngx_max_module; j++) {
+                if (ngx_modules[j]->type != NGX_HTTP_MODULE) {
+                    continue;
+                }
+
+                if (ngx_modules[j]->ctx_index
+                    == ngx_http_upstream_module.ctx_index)
+                {
+                    continue;
+                }
+
+                cmd = ngx_modules[j]->commands;
+                if (cmd == NULL) {
+                    continue;
+                }
+
+                for ( /* void */ ; cmd->name.len; cmd++) {
+                    if (!(cmd->type & NGX_HTTP_UPS_CONF)) {
+                        continue;
+                    }
+
+                    if (cmd->set == NULL) {
+                        continue;
+                    }
+
+                    value = line[0].elts;
+                    if (cmd->name.len == value[0].len
+                        && ngx_strncasecmp(cmd->name.data, value[0].data,
+                                           value[0].len)
+                        != 0)
+                    {
+                        continue;
+                    }
+
+                    if (cmd->set(&cf, cmd,
+                            duscf->ctx->srv_conf[ngx_modules[j]->ctx_index])
+                        != NGX_CONF_OK)
+                    {
+                        ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
+                                      "[dyups] set upstream \"%V\"",
+                                      &cmd->name);
+                    }
+                }
+            }
         }
     }
 
@@ -1079,6 +1134,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     cf.module_type = NGX_HTTP_MODULE;
     cf.cmd_type = NGX_HTTP_MAIN_CONF;
     cf.log = ngx_cycle->log;
+    cf.ctx = duscf->ctx;
 
     init = uscf->peer.init_upstream ? uscf->peer.init_upstream:
         ngx_http_upstream_init_round_robin;
@@ -1259,6 +1315,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 
     dscf = uscf->srv_conf[ngx_http_dyups_module.ctx_index];
     duscf->count = &dscf->count;
+    duscf->ctx = ctx;
 
     return NGX_OK;
 }
