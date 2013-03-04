@@ -4,7 +4,7 @@ TODO:
 
 1. 完善输入指令合法性验证，现在只支持upstream的server配置ip，否则dns解析将会阻塞
 
-2. ip hash选择server算法支持
+2. ip hash选择server算法支持 `done`
 
 3. 权重,重试失败次数等属性更新支持 `done`
 
