@@ -185,6 +185,18 @@ ngx_module_t  ngx_http_dyups_module = {
 };
 
 
+static ngx_uint_t argument_number[] = {
+    NGX_CONF_NOARGS,
+    NGX_CONF_TAKE1,
+    NGX_CONF_TAKE2,
+    NGX_CONF_TAKE3,
+    NGX_CONF_TAKE4,
+    NGX_CONF_TAKE5,
+    NGX_CONF_TAKE6,
+    NGX_CONF_TAKE7
+};
+
+
 ngx_uint_t ngx_http_dyups_shm_generation = 0;
 ngx_dyups_global_ctx_t ngx_dyups_global_ctx;
 
@@ -949,10 +961,10 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
                    "[dyups] upstream name: %V", &name);
 
     rc = ngx_http_dyups_check_commands(arglist);
-    /* if (rc != NGX_OK) { */
-    /*     ngx_str_set(rv, "commands error"); */
-    /*     return NGX_HTTP_NOT_ALLOWED; */
-    /* } */
+    if (rc != NGX_OK) {
+        ngx_str_set(rv, "commands error");
+        return NGX_HTTP_NOT_ALLOWED;
+    }
 
     rc = ngx_dyups_do_update(&name, arglist, rv);
     if (rc != NGX_HTTP_OK) {
@@ -1108,7 +1120,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
                         continue;
                     }
 
-                    value = line[i].elts;
                     if (cmd->name.len != value[0].len
                         || ngx_strncasecmp(cmd->name.data, value[0].data,
                                            value[0].len)
@@ -1405,50 +1416,135 @@ ngx_http_dyups_send_response(ngx_http_request_t *r, ngx_int_t status,
 static ngx_int_t
 ngx_http_dyups_check_commands(ngx_array_t *arglist)
 {
-    ngx_int_t     rc;
-    ngx_url_t     u;
-    ngx_str_t    *value;
-    ngx_pool_t   *pool;
-    ngx_uint_t    i;
-    ngx_array_t  *line;
+    ngx_int_t       rc;
+    ngx_url_t       u;
+    ngx_str_t      *value;
+    ngx_flag_t      found;
+    ngx_pool_t     *pool;
+    ngx_uint_t      i, j;
+    ngx_array_t    *line;
+    ngx_command_t  *cmd;
 
     pool = ngx_create_pool(128, ngx_cycle->log);
     if (pool == NULL) {
         return NGX_ERROR;
     }
 
+    found = 1;
     line = arglist->elts;
     for (i = 0; i < arglist->nelts; i++) {
         value = line[i].elts;
 
         /* TODO */
-
-        if (line[i].nelts < 2) {
-            rc = NGX_ERROR;
-            goto finish;
-        }
-
         if (value[0].len == 6 &&
-            ngx_strncasecmp(value[0].data, (u_char *) "server", 6) != 0)
+            ngx_strncasecmp(value[0].data, (u_char *) "server", 6) == 0)
         {
-            rc = NGX_ERROR;
-            goto finish;
-        }
+            found = 1;
 
-        u.url = value[1];
-        u.default_port = 80;
+            u.url = value[1];
+            u.default_port = 80;
 
-        if (ngx_parse_url(pool, &u) != NGX_OK) {
-
-            if (u.err) {
-                ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
-                              "[dyups] %s in upstream \"%V\"", u.err, &u.url);
+            if (line[i].nelts < 2) {
+                rc = NGX_ERROR;
+                goto finish;
             }
 
-            rc = NGX_ERROR;
-            goto finish;
-        }
+            if (ngx_parse_url(pool, &u) != NGX_OK) {
 
+                if (u.err) {
+                    ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
+                                  "[dyups] %s in upstream \"%V\"",
+                                  u.err, &u.url);
+                }
+
+                rc = NGX_ERROR;
+                goto finish;
+            }
+
+        } else {
+
+            for (j = 0; j < ngx_max_module; j++) {
+                if (ngx_modules[j]->type != NGX_HTTP_MODULE) {
+                    continue;
+                }
+
+                if (ngx_modules[j]->ctx_index
+                    == ngx_http_upstream_module.ctx_index)
+                {
+                    continue;
+                }
+
+                cmd = ngx_modules[j]->commands;
+                if (cmd == NULL) {
+                    continue;
+                }
+
+                for ( /* void */ ; cmd->name.len; cmd++) {
+                    if (!(cmd->type & NGX_HTTP_UPS_CONF)) {
+                        continue;
+                    }
+
+                    if (cmd->set == NULL) {
+                        continue;
+                    }
+
+                    if (cmd->name.len != value[0].len
+                        || ngx_strncasecmp(cmd->name.data, value[0].data,
+                                           value[0].len)
+                        != 0)
+                    {
+                        continue;
+                    }
+
+                    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                                   "[dyups] check upstream \"%V\"",
+                                   &cmd->name);
+
+                    if (!(cmd->type & NGX_CONF_ANY)) {
+
+                        if (cmd->type & NGX_CONF_FLAG) {
+
+                            if (line[i].nelts != 2) {
+                                rc = NGX_ERROR;
+                                goto finish;
+                            }
+
+                        } else if (cmd->type & NGX_CONF_1MORE) {
+
+                            if (line[i].nelts < 2) {
+                                rc = NGX_ERROR;
+                                goto finish;
+                            }
+
+                        } else if (cmd->type & NGX_CONF_2MORE) {
+
+                            if (line[i].nelts < 3) {
+                                rc = NGX_ERROR;
+                                goto finish;
+                            }
+
+                        } else if (line[i].nelts > NGX_CONF_MAX_ARGS) {
+
+                            rc = NGX_ERROR;
+                            goto finish;
+
+                        } else if (!(cmd->type
+                                     & argument_number[line[i].nelts - 1]))
+                        {
+                            rc = NGX_ERROR;
+                            goto finish;
+                        }
+
+                    }
+
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        rc = NGX_ERROR;
+        goto finish;
     }
 
     rc = NGX_OK;
