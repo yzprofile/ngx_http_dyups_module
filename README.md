@@ -1,5 +1,5 @@
 ## Description
-This module can be used to update your upstream-list without reload config files.
+This module can be used to update your upstream-list without reloadding Nginx.
 
 ### Config Example
 
@@ -62,7 +62,7 @@ $ ./configure --add-module=./ngx_http_dyups_module
 ### GET
 - `/detail`         get all upstreams and their servers
 - `/list`           get the list of upstreams
-- `/upstream/name`  find the upstream by it\'s name
+- `/upstream/name`  find the upstream by it's name
 
 ### POST
 - `/upstream/name`  update one upstream
@@ -71,6 +71,12 @@ $ ./configure --add-module=./ngx_http_dyups_module
 
 ### DELETE
 - `/upstream/name`  delete one upstream
+
+Call the interface, when you get the return code is `500`, you need to reload nginx to make the Nginx work at a good state.
+
+Other code means you modify your commands and call the interface again.
+
+Of course, You also need a 3-part to generate the new config and dump it to Nginx'conf directory.
 
 ## Sample
 ```bash
