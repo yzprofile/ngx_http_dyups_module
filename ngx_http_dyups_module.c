@@ -1419,7 +1419,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
     ngx_int_t       rc;
     ngx_url_t       u;
     ngx_str_t      *value;
-    ngx_flag_t      found;
+    ngx_flag_t      found, match;
     ngx_pool_t     *pool;
     ngx_uint_t      i, j;
     ngx_array_t    *line;
@@ -1463,6 +1463,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
 
         } else {
 
+            match = 0;
             for (j = 0; j < ngx_max_module; j++) {
                 if (ngx_modules[j]->type != NGX_HTTP_MODULE) {
                     continue;
@@ -1480,6 +1481,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
                 }
 
                 for ( /* void */ ; cmd->name.len; cmd++) {
+
                     if (!(cmd->type & NGX_HTTP_UPS_CONF)) {
                         continue;
                     }
@@ -1490,8 +1492,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
 
                     if (cmd->name.len != value[0].len
                         || ngx_strncasecmp(cmd->name.data, value[0].data,
-                                           value[0].len)
-                        != 0)
+                                           value[0].len) != 0)
                     {
                         continue;
                     }
@@ -1499,6 +1500,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
                     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                                    "[dyups] check upstream \"%V\"",
                                    &cmd->name);
+                    match = 1;
 
                     if (!(cmd->type & NGX_CONF_ANY)) {
 
@@ -1538,7 +1540,14 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
                     }
 
                 }
+
             }
+
+            if (!match) {
+                rc = NGX_ERROR;
+                goto finish;
+            }
+
         }
     }
 
