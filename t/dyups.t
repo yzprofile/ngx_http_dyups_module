@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(40);
+my $t = Test::Nginx->new()->plan(42);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -116,6 +116,13 @@ http {
         listen 8088;
         location / {
             echo 8088;
+        }
+    }
+
+    server {
+        listen unix:/tmp/dyupssocket;
+        location / {
+            echo unix;
         }
     }
 
@@ -261,6 +268,9 @@ like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-04 15:53:49');
 
 like(mhttp_post('/upstream/dyhost', 'ip_hash aaa;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:36:40');
 like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:37:25');
+
+like(mhttp_post('/upstream/dyhost', 'server unix:/tmp/dyupssocket;', 8081), qr/success/m, '2013-03-05 16:13:11');
+like(mhttp_get('/', 'dyhost', 8080), qr/unix/m, '2013-03-05 16:13:23');
 
 $t->stop();
 
