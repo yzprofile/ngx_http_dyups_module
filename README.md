@@ -1,16 +1,7 @@
-# developing
+## Description
+This module can be used to update your upstream-list without reload config files.
 
-TODO:
-
-1. 完善输入指令合法性验证，现在只支持upstream的server配置ip，否则dns解析将会阻塞
-
-2. ip hash选择server算法支持 `done`
-
-3. 权重,重试失败次数等属性更新支持 `done`
-
-4. 健康检查模块支持
-
-## Config Example
+### Config Example
 
     daemon off;
     error_log logs/error.log debug;
@@ -58,19 +49,30 @@ TODO:
         }
     }
 
-## STATUS [method] GET
-- /detail  返回所有upstream和server
-- /list  返回所有upstream列表
-- /upstream/name  返回当前upstream的server信息
+##Installation
+```bash
 
-## ADD [method] POST
-- /upstream/name
-- [body] server ip:port
+$ git clone git://github.com/yzprofile/ngx_http_dyups_module.git
+$ ./configure --add-module=./ngx_http_dyups_module
 
-## DELETE [method] DELETE
-- /upstream/name
+```
 
-# Example
+## restful interface
+
+### GET
+- `/detail`         get all upstreams and their servers
+- `/list`           get the list of upstreams
+- `/upstream/name`  find the upstream by it\'s name
+
+### POST
+- `/upstream/name`  update one upstream
+- `body` commands;
+- `body` server ip:port;
+
+### DELETE
+- `/upstream/name`  delete one upstream
+
+## Sample
 ```bash
 » curl -H "host: dyhost" 127.0.0.1:8080
 <html>
@@ -111,3 +113,16 @@ server 127.0.0.1:8088
 host2
 server 127.0.0.1:8089
 ```
+
+## developing
+
+TODO:
+
+1. check every commands to make sure they are all ok before update upstream.
+
+2. support ip_hash and keepalive or other upstream module `done`
+
+3. support `weight`,`max_fails`,`fail_timeout`,`backup` `done`
+
+4. support health check module
+
