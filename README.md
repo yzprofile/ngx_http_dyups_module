@@ -118,7 +118,7 @@ server 127.0.0.1:8089
 
 TODO:
 
-1. check every commands to make sure they are all ok before update upstream.
+1. check every commands to make sure they are all ok before update upstream. `done`
 
 2. support ip_hash and keepalive or other upstream module `done`
 
