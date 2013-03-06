@@ -2079,7 +2079,7 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
     ngx_array_t                  msgs;
     ngx_core_conf_t             *ccf;
     ngx_slab_pool_t             *shpool;
-    ngx_dyups_msg_t             *msg, *tmsg;
+    ngx_dyups_msg_t             *msg;
     ngx_dyups_shctx_t           *sh;
 
     ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
@@ -2135,39 +2135,8 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
         msg->pid[i] = ngx_pid;
         msg->count++;
 
-        tmsg = ngx_array_push(&msgs);
-        if (tmsg == NULL) {
-            goto failed;
-        }
-
-        tmsg->flag = msg->flag;
-
-        tmsg->path.data = ngx_pnalloc(pool, msg->path.len);
-        if (tmsg->path.data == NULL) {
-            goto failed;
-        }
-
-        ngx_memcpy(tmsg->path.data, msg->path.data, msg->path.len);
-        tmsg->path.len = msg->path.len;
-
-        tmsg->content.data = ngx_pnalloc(pool, msg->content.len);
-
-        if (tmsg->content.data == NULL) {
-            goto failed;
-        }
-
-        ngx_memcpy(tmsg->content.data, msg->content.data, msg->content.len);
-        tmsg->content.len = msg->content.len;
-    }
-
-    msg = msgs.elts;
-    for (n = 0; n < msgs.nelts; n++) {
-        path = msg[n].path;
-        content = msg[n].content;
-
-        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ev->log, 0,
-                       "[dyups] read msg path:%V, content:%V, flag %ui",
-                       &path, &content, msg[n].flag);
+        path = msg->path;
+        content = msg->content;
 
         rc = ngx_dyups_sync_cmd(pool, &path, &content, msg[n].flag);
         if (rc != NGX_OK) {
