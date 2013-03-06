@@ -117,6 +117,7 @@ static ngx_int_t ngx_http_dyups_get_shm_name(ngx_str_t *shm_name,
     ngx_pool_t *pool, ngx_uint_t generation);
 static ngx_int_t ngx_http_dyups_init_process(ngx_cycle_t *cycle);
 static void ngx_http_dyups_read_msg(ngx_event_t *ev);
+static void ngx_http_dyups_read_msg_locked(ngx_event_t *ev);
 static ngx_int_t ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body,
     ngx_uint_t flag);
 static void ngx_dyups_destroy_msg(ngx_slab_pool_t *shpool,
@@ -425,26 +426,35 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 static ngx_int_t
 ngx_http_dyups_interface_handler(ngx_http_request_t *r)
 {
+    ngx_int_t                    rc;
     ngx_array_t                 *res;
     ngx_event_t                 *timer;
+    ngx_slab_pool_t             *shpool;
     ngx_http_dyups_main_conf_t  *dmcf;
 
     dmcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
     timer = &ngx_dyups_global_ctx.msg_timer;
+    shpool = ngx_dyups_global_ctx.shpool;
 
     res = ngx_dyups_parse_path(r->pool, &r->uri);
     if (res == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    ngx_http_dyups_read_msg(timer);
-
     if (r->method == NGX_HTTP_GET) {
+        ngx_http_dyups_read_msg(timer);
         return ngx_http_dyups_do_get(r, res);
     }
 
     if (r->method == NGX_HTTP_DELETE) {
-        return ngx_http_dyups_do_delete(r, res);
+        ngx_shmtx_lock(&shpool->mutex);
+
+        ngx_http_dyups_read_msg_locked(timer);
+        rc = ngx_http_dyups_do_delete(r, res);
+
+        ngx_shmtx_unlock(&shpool->mutex);
+
+        return rc;
     }
 
     return ngx_http_dyups_interface_read_body(r);
@@ -804,10 +814,20 @@ ngx_http_dyups_interface_read_body(ngx_http_request_t *r)
 static void
 ngx_http_dyups_body_handler(ngx_http_request_t *r)
 {
-    ngx_str_t     rv;
-    ngx_int_t     status;
-    ngx_buf_t    *body;
-    ngx_array_t  *arglist, *res;
+    ngx_str_t         rv;
+    ngx_int_t         status;
+    ngx_buf_t        *body;
+    ngx_event_t      *timer;
+    ngx_array_t      *arglist, *res;
+    ngx_slab_pool_t  *shpool;
+
+    timer = &ngx_dyups_global_ctx.msg_timer;
+    shpool = ngx_dyups_global_ctx.shpool;
+
+    if (r->method != NGX_HTTP_POST) {
+        status = NGX_HTTP_NOT_ALLOWED;
+        goto finish;
+    }
 
     res = ngx_dyups_parse_path(r->pool, &r->uri);
     if (res == NULL) {
@@ -847,13 +867,11 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         goto finish;
     }
 
-    if (r->method == NGX_HTTP_POST) {
+    ngx_shmtx_lock(&shpool->mutex);
 
-        status = ngx_http_dyups_do_post(r, res, arglist, &rv);
+    ngx_http_dyups_read_msg_locked(timer);
 
-    } else {
-        status = NGX_HTTP_NOT_ALLOWED;
-    }
+    status = ngx_http_dyups_do_post(r, res, arglist, &rv);
 
     if (status == NGX_HTTP_OK) {
 
@@ -863,6 +881,8 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
             status = NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
     }
+
+    ngx_shmtx_unlock(&shpool->mutex);
 
 finish:
 
@@ -2032,6 +2052,25 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
 static void
 ngx_http_dyups_read_msg(ngx_event_t *ev)
 {
+    ngx_slab_pool_t             *shpool;
+    ngx_http_dyups_main_conf_t  *dmcf;
+
+    dmcf = ev->data;
+    shpool = ngx_dyups_global_ctx.shpool;
+
+    ngx_shmtx_lock(&shpool->mutex);
+
+    ngx_http_dyups_read_msg_locked(ev);
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
+}
+
+
+static void
+ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
+{
     ngx_int_t                    i, rc;
     ngx_str_t                    path, content;
     ngx_uint_t                   n;
@@ -2042,27 +2081,19 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
     ngx_slab_pool_t             *shpool;
     ngx_dyups_msg_t             *msg, *tmsg;
     ngx_dyups_shctx_t           *sh;
-    ngx_http_dyups_main_conf_t  *dmcf;
 
     ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                            ngx_core_module);
 
-    dmcf = ev->data;
     sh = ngx_dyups_global_ctx.sh;
     shpool = ngx_dyups_global_ctx.shpool;
 
-    ngx_shmtx_lock(&shpool->mutex);
-
     if (ngx_queue_empty(&sh->msg_queue)) {
-        ngx_shmtx_unlock(&shpool->mutex);
-        ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
         return;
     }
 
     pool = ngx_create_pool(ngx_pagesize, ev->log);
     if (pool == NULL) {
-        ngx_shmtx_unlock(&shpool->mutex);
-        ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
         return;
     }
 
@@ -2129,8 +2160,6 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
         tmsg->content.len = msg->content.len;
     }
 
-    ngx_shmtx_unlock(&shpool->mutex);
-
     msg = msgs.elts;
     for (n = 0; n < msgs.nelts; n++) {
         path = msg[n].path;
@@ -2151,8 +2180,6 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
 
     ngx_destroy_pool(pool);
 
-    ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
-
     return;
 
 failed:
@@ -2160,10 +2187,6 @@ failed:
                   "may cause the config inaccuracy");
 
     ngx_destroy_pool(pool);
-
-    ngx_shmtx_unlock(&shpool->mutex);
-
-    ngx_dyups_add_timer(ev, dmcf->read_msg_timeout);
 }
 
 
@@ -2180,8 +2203,6 @@ ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
 
     sh = ngx_dyups_global_ctx.sh;
     shpool = ngx_dyups_global_ctx.shpool;
-
-    ngx_shmtx_lock(&shpool->mutex);
 
     msg = ngx_slab_alloc_locked(shpool, sizeof(ngx_dyups_msg_t));
     if (msg == NULL) {
@@ -2227,8 +2248,6 @@ ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
 
     ngx_queue_insert_head(&sh->msg_queue, &msg->queue);
 
-    ngx_shmtx_unlock(&shpool->mutex);
-
     return NGX_OK;
 
 failed:
@@ -2236,8 +2255,6 @@ failed:
     if (msg) {
         ngx_dyups_destroy_msg(shpool, msg);
     }
-
-    ngx_shmtx_unlock(&shpool->mutex);
 
     return NGX_ERROR;
 }
