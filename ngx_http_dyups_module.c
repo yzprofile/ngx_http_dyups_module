@@ -447,7 +447,9 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
     }
 
     if (r->method == NGX_HTTP_DELETE) {
-        ngx_shmtx_lock(&shpool->mutex);
+        if (!ngx_shmtx_trylock(&shpool->mutex)) {
+            return NGX_HTTP_CONFLICT;
+        }
 
         ngx_http_dyups_read_msg_locked(timer);
         rc = ngx_http_dyups_do_delete(r, res);
@@ -867,7 +869,11 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         goto finish;
     }
 
-    ngx_shmtx_lock(&shpool->mutex);
+    if (!ngx_shmtx_trylock(&shpool->mutex)) {
+        status = NGX_HTTP_CONFLICT;
+        ngx_str_set(&rv, "wait and try again\n");
+        goto finish;
+    }
 
     ngx_http_dyups_read_msg_locked(timer);
 
@@ -2073,7 +2079,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 {
     ngx_int_t                    i, rc;
     ngx_str_t                    path, content;
-    ngx_uint_t                   n;
     ngx_pool_t                  *pool;
     ngx_queue_t                 *q, *t;
     ngx_array_t                  msgs;
@@ -2138,7 +2143,7 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
         path = msg->path;
         content = msg->content;
 
-        rc = ngx_dyups_sync_cmd(pool, &path, &content, msg[n].flag);
+        rc = ngx_dyups_sync_cmd(pool, &path, &content, msg->flag);
         if (rc != NGX_OK) {
             ngx_log_error(NGX_LOG_ALERT, ev->log, 0,
                           "[dyups] read msg error, may cause the "
