@@ -1125,6 +1125,9 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             us->fail_timeout = fail_timeout;
             us->backup = backup;
 
+            us->addrs->name.data = ngx_pstrdup(duscf->pool, &u.addrs->name);
+            us->addrs->name.len = u.addrs->name.len;
+
         } else {
 
             cf.pool = duscf->pool;
