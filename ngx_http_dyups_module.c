@@ -447,10 +447,17 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
     }
 
     if (r->method == NGX_HTTP_DELETE) {
+
+#if NGX_DEBUG
+
+        ngx_shmtx_lock(&shpool->mutex);
+
+#else
         if (!ngx_shmtx_trylock(&shpool->mutex)) {
             return NGX_HTTP_CONFLICT;
         }
 
+#endif
         ngx_http_dyups_read_msg_locked(timer);
         rc = ngx_http_dyups_do_delete(r, res);
 
@@ -869,12 +876,18 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         goto finish;
     }
 
-    if (!ngx_shmtx_trylock(&shpool->mutex)) {
-        status = NGX_HTTP_CONFLICT;
-        ngx_str_set(&rv, "wait and try again\n");
-        goto finish;
-    }
+#if NGX_DEBUG
 
+        ngx_shmtx_lock(&shpool->mutex);
+
+#else
+        if (!ngx_shmtx_trylock(&shpool->mutex)) {
+            status = NGX_HTTP_CONFLICT;
+            ngx_str_set(&rv, "wait and try again\n");
+            goto finish;
+        }
+
+#endif
     ngx_http_dyups_read_msg_locked(timer);
 
     status = ngx_http_dyups_do_post(r, res, arglist, &rv);

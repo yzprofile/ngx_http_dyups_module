@@ -74,6 +74,8 @@ $ ./configure --add-module=./ngx_http_dyups_module
 
 Call the interface, when you get the return code is `500`, you need to reload nginx to make the Nginx work at a good state.
 
+If you got 409, you need resend the same commands again latter.
+
 Other code means you modify your commands and call the interface again.
 
 Of course, You also need a 3-part to generate the new config and dump it to Nginx'conf directory.

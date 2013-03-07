@@ -90,7 +90,7 @@ $t->write_file_expand('nginx.conf', <<'EOF');
 
 daemon off;
 
-worker_processes 2;
+worker_processes 1;
 
 events {
     accept_mutex off;
