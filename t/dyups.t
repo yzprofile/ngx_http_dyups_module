@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(42);
+my $t = Test::Nginx->new()->plan(61);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -275,8 +275,176 @@ like(mhttp_post('/upstream/dyhost', 'server unix:/tmp/dyupssocket;', 8081), qr/s
 like(mhttp_get('/', 'dyhost', 8080), qr/unix/m, '2013-03-05 16:13:23');
 
 $t->stop();
+unlink("/tmp/dyupssocket");
 
 ##############################################################################
+
+$t->write_file_expand('nginx.conf', <<'EOF');
+
+%%TEST_GLOBALS%%
+
+daemon off;
+
+worker_processes auto;
+
+events {
+    accept_mutex off;
+}
+
+http {
+
+    upstream host1 {
+        server 127.0.0.1:8088;
+    }
+
+    upstream host2 {
+        server 127.0.0.1:8089;
+    }
+
+    server {
+        listen   8080;
+
+        location / {
+            proxy_pass http://$host;
+        }
+    }
+    
+    server {
+        listen 8088;
+        location / {
+            echo 8088;
+        }
+    }
+
+    server {
+        listen unix:/tmp/dyupssocket;
+        location / {
+            echo unix;
+        }
+    }
+
+    server {
+        listen 8089;
+        location / {
+            echo 8089;    
+        }
+    }
+
+    server {
+        listen 8081;
+        location / {
+            dyups_interface;
+        }
+    }
+}
+EOF
+
+mrun($t);
+
+
+$rep = qr/
+host1
+host2
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 16:51:46');
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:30:07');
+like(mhttp_get('/upstream/host1', 'localhost', 8081), qr/server 127.0.0.1:8088/m, '2013-02-26 17:35:19');
+
+###############################################################################
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2013-02-26 16:51:51');
+
+$rep = qr/
+host1
+host2
+dyhost
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 17:02:13');
+
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+
+dyhost
+server 127.0.0.1:8088
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:36:59');
+
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;server 127.0.0.1:8089;', 8081), qr/success/m, '2013-02-26 17:40:24');
+
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+
+dyhost
+server 127.0.0.1:8088
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:41:09');
+
+
+$rep = qr/
+host1
+host2
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2013-02-26 17:00:54');
+
+$rep = qr/
+host1
+server 127.0.0.1:8088
+
+host2
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:42:27');
+
+$rep = qr/
+host2
+server 127.0.0.1:8089
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:45:03');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2013-02-26 17:05:20');
+
+$rep = qr/
+host2
+server 127.0.0.1:8089
+
+dyhost
+server 127.0.0.1:8088
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:46:03');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088 weight=3; server 127.0.0.1:8089 weight=1;', 8081), qr/success/m, '2013-02-28 16:27:45');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088; server 127.0.0.1:18089 backup;', 8081), qr/success/m, '2013-02-28 16:23:41');
+
+like(mhttp_post('/upstream/dyhost', 'ip_hash;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/success/m, '2013-03-04 15:53:41');
+
+like(mhttp_post('/upstream/dyhost', 'ip_hash aaa;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:36:40');
+like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:37:25');
+
+like(mhttp_post('/upstream/dyhost', 'server unix:/tmp/dyupssocket;', 8081), qr/success/m, '2013-03-05 16:13:11');
+
+$t->stop();
+unlink("/tmp/dyupssocket");
+
+##############################################################################
+
 
 sub mhttp($;$;%) {
     my ($request, $port, %extra) = @_;
