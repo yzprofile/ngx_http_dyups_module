@@ -878,14 +878,14 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
 
 #if NGX_DEBUG
 
-        ngx_shmtx_lock(&shpool->mutex);
+    ngx_shmtx_lock(&shpool->mutex);
 
 #else
-        if (!ngx_shmtx_trylock(&shpool->mutex)) {
-            status = NGX_HTTP_CONFLICT;
-            ngx_str_set(&rv, "wait and try again\n");
-            goto finish;
-        }
+    if (!ngx_shmtx_trylock(&shpool->mutex)) {
+        status = NGX_HTTP_CONFLICT;
+        ngx_str_set(&rv, "wait and try again\n");
+        goto finish;
+    }
 
 #endif
     ngx_http_dyups_read_msg_locked(timer);
@@ -1067,7 +1067,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             /* TODO: parse ip*/
             if (ngx_parse_url(duscf->pool, &u) != NGX_OK) {
                 if (u.err) {
-                    ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
+                    ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
                                   "[dyups] %s in upstream \"%V\"",
                                   u.err, &u.url);
                 }
@@ -1491,7 +1491,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
             if (ngx_parse_url(pool, &u) != NGX_OK) {
 
                 if (u.err) {
-                    ngx_log_error(NGX_LOG_EMERG, ngx_cycle->log, 0,
+                    ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
                                   "[dyups] %s in upstream \"%V\"",
                                   u.err, &u.url);
                 }

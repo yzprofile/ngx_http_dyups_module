@@ -49,13 +49,41 @@ This module can be used to update your upstream-list without reloadding Nginx.
         }
     }
 
-##Installation
+## Installation
 ```bash
 
 $ git clone git://github.com/yzprofile/ngx_http_dyups_module.git
 $ ./configure --add-module=./ngx_http_dyups_module
 
 ```
+
+## Directives
+
+Syntax: **dyups_interface**
+
+Default: `none`
+
+Context: `loc`
+
+This directive set the interface location where you can add or delete the upstream list. See the section of Interface for detail.
+
+
+Syntax: **dyups_read_msg_timeout** `time`
+
+Default: `1s`
+
+Context: `main`
+
+This directive set the interval of workers readding the commands from share memory.
+
+
+Syntax: **dyups_shm_zone_size** `size`
+
+Default: `2MB`
+
+Context: `main`
+
+This directive set the size of share memory which used to store the commands.
 
 ## restful interface
 
