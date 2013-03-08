@@ -768,6 +768,7 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
     if (rc != NGX_OK) {
         ngx_str_set(&rv, "alert: delte success but not sync to other process");
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+        goto finish;
     }
 
     ngx_str_set(&rv, "success");
@@ -1292,8 +1293,6 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     if (duscf->pool) {
         ngx_destroy_pool(duscf->pool);
     }
-
-    uscf = duscf->upstream;
 
     duscf->pool = ngx_create_pool(128, ngx_cycle->log);
     if (duscf->pool == NULL) {
