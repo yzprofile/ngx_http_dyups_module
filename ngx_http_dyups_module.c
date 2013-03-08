@@ -116,6 +116,7 @@ static char *ngx_http_dyups_init_shm(ngx_conf_t *cf, void *conf);
 static ngx_int_t ngx_http_dyups_get_shm_name(ngx_str_t *shm_name,
     ngx_pool_t *pool, ngx_uint_t generation);
 static ngx_int_t ngx_http_dyups_init_process(ngx_cycle_t *cycle);
+static void ngx_http_dyups_exit_process(ngx_cycle_t *cycle);
 static void ngx_http_dyups_read_msg(ngx_event_t *ev);
 static void ngx_http_dyups_read_msg_locked(ngx_event_t *ev);
 static ngx_int_t ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body,
@@ -180,7 +181,7 @@ ngx_module_t  ngx_http_dyups_module = {
     ngx_http_dyups_init_process,   /* init process */
     NULL,                          /* init thread */
     NULL,                          /* exit thread */
-    NULL,                          /* exit process */
+    ngx_http_dyups_exit_process,   /* exit process */
     NULL,                          /* exit master */
     NGX_MODULE_V1_PADDING
 };
@@ -374,7 +375,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 
         uscf = uscfp[i];
 
-#if NGX_DEBUG
+#if (NGX_DEBUG)
         ngx_log_error(NGX_LOG_EMERG, cf->log, 0, "%ui: %V", i, &uscf->host);
 #endif
 
@@ -420,6 +421,30 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
     ngx_add_timer(timer, dmcf->read_msg_timeout);
 
     return NGX_OK;
+}
+
+
+static void
+ngx_http_dyups_exit_process(ngx_cycle_t *cycle)
+{
+    ngx_uint_t                   i;
+    ngx_http_dyups_srv_conf_t   *duscfs, *duscf;
+    ngx_http_dyups_main_conf_t  *dumcf;
+
+    dumcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
+                                               ngx_http_dyups_module);
+
+    duscfs = dumcf->dy_upstreams.elts;
+    for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
+
+        duscf = &duscfs[i];
+
+        if (duscf->pool) {
+
+            ngx_destroy_pool(duscf->pool);
+            duscf->pool = NULL;
+        }
+    }
 }
 
 
@@ -875,7 +900,7 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         goto finish;
     }
 
-#if NGX_DEBUG
+#if (NGX_DEBUG)
 
     ngx_shmtx_lock(&shpool->mutex);
 
@@ -1634,7 +1659,7 @@ ngx_dyups_parse_content(ngx_pool_t *pool, ngx_buf_t *buf)
 
         if (rc == NGX_OK) {
 
-#if NGX_DEBUG
+#if (NGX_DEBUG)
             ngx_str_t  *arg;
             ngx_uint_t  i;
 
@@ -1983,7 +2008,7 @@ ngx_dyups_parse_path(ngx_pool_t *pool, ngx_str_t *path)
         p += str->len + 1;
     }
 
-#if NGX_DEBUG
+#if (NGX_DEBUG)
     ngx_str_t  *arg;
     ngx_uint_t  i;
 
@@ -2087,6 +2112,7 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 {
     ngx_int_t                    i, rc;
     ngx_str_t                    path, content;
+    ngx_flag_t                   found;
     ngx_pool_t                  *pool;
     ngx_queue_t                 *q, *t;
     ngx_array_t                  msgs;
@@ -2094,6 +2120,9 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
     ngx_slab_pool_t             *shpool;
     ngx_dyups_msg_t             *msg;
     ngx_dyups_shctx_t           *sh;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                   "[dyups] read msg %P", ngx_pid);
 
     ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                            ngx_core_module);
@@ -2135,18 +2164,31 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
             continue;
         }
 
+        found = 0;
         for (i = 0; i < msg->count; i++) {
+
+            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                           "[dyups] msg pids [%P]", msg->pid[i]);
+
             if (msg->pid[i] == ngx_pid) {
+
+                found = 1;
                 break;
             }
         }
 
-        if (i != msg->count) {
+        if (found) {
+            ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                           "[dyups] msg %V count %ui found",
+                           &msg->path, msg->count);
             continue;
         }
 
         msg->pid[i] = ngx_pid;
         msg->count++;
+
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                       "[dyups] msg %V count %ui", &msg->path, msg->count);
 
         path = msg->path;
         content = msg->content;
@@ -2159,6 +2201,9 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
                           &path, &content);
         }
     }
+
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                   "[dyups] read end");
 
     ngx_destroy_pool(pool);
 
@@ -2195,7 +2240,8 @@ ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
 
     msg->flag = flag;
     msg->count = 0;
-    msg->pid = ngx_slab_alloc_locked(shpool, ccf->worker_processes);
+    msg->pid = ngx_slab_alloc_locked(shpool,
+                                     sizeof(ngx_pid_t) * ccf->worker_processes);
 
     if (msg->pid == NULL) {
         goto failed;
@@ -2227,6 +2273,9 @@ ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
         msg->content.data = NULL;
         msg->content.len = 0;
     }
+
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] send msg %V count %ui", &msg->path, msg->count);
 
     ngx_queue_insert_head(&sh->msg_queue, &msg->queue);
 
