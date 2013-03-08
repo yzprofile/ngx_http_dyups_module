@@ -430,9 +430,7 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
     ngx_array_t                 *res;
     ngx_event_t                 *timer;
     ngx_slab_pool_t             *shpool;
-    ngx_http_dyups_main_conf_t  *dmcf;
 
-    dmcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
     timer = &ngx_dyups_global_ctx.msg_timer;
     shpool = ngx_dyups_global_ctx.shpool;
 
@@ -1216,10 +1214,7 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
     ngx_http_dyups_srv_conf_t      *duscfs, *duscf, *duscf_del;
     ngx_http_dyups_main_conf_t     *dumcf;
     ngx_http_upstream_srv_conf_t   *uscf;
-    ngx_http_upstream_main_conf_t  *umcf;
 
-    umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
-                                               ngx_http_upstream_module);
     dumcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
                                                 ngx_http_dyups_module);
     *idx = -1;
@@ -1612,10 +1607,8 @@ ngx_dyups_parse_content(ngx_pool_t *pool, ngx_buf_t *buf)
 {
     ngx_int_t     rc;
     ngx_buf_t     body;
-    ngx_log_t    *log;
     ngx_array_t  *args_list, *args;
 
-    log = pool->log;
     args_list = ngx_array_create(pool, 1, sizeof(ngx_array_t));
     if (args_list == NULL) {
         return NULL;
