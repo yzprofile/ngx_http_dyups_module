@@ -22,9 +22,6 @@ typedef struct {
     ngx_pool_t                    *pool;
     ngx_http_conf_ctx_t           *ctx;
     ngx_http_upstream_srv_conf_t  *upstream;
-#if (NGX_HTTP_UPSTREAM_CHECK)
-    ngx_array_t                    ucidxs;  /* ngx_uint_t */
-#endif
 } ngx_http_dyups_srv_conf_t;
 
 
@@ -1053,9 +1050,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
     ngx_http_upstream_server_t          *us;
     ngx_http_upstream_srv_conf_t        *uscf;
     ngx_http_dyups_upstream_srv_conf_t  *dscf;
-#if (NGX_HTTP_UPSTREAM_CHECK)
-    ngx_uint_t                           idx, *idxp;
-#endif
 
     uscf = duscf->upstream;
 
@@ -1229,28 +1223,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 
     uscf->peer.init = ngx_http_dyups_init_peer;
 
-#if (NGX_HTTP_UPSTREAM_CHECK)
-
-    us = uscf->servers->elts;
-
-    for (i = 0; i < uscf->servers->nelts; i++) {
-
-        idx = ngx_http_upstream_check_add_dynamic_peer(duscf->pool, uscf,
-                                                       us[i].addrs);
-        if ((ngx_int_t) idx == NGX_ERROR) {
-            continue;
-        }
-
-        idxp = ngx_array_push(&duscf->ucidxs);
-        if (idxp == NULL) {
-            return NGX_ERROR;
-        }
-
-        *idxp = idx;
-    }
-
-#endif
-
     return NGX_OK;
 }
 
@@ -1415,14 +1387,6 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     duscf->count = &dscf->count;
     duscf->ctx = ctx;
 
-#if (NGX_HTTP_UPSTREAM_CHECK)
-    if (ngx_array_init(&duscf->ucidxs, duscf->pool, 16,
-                       sizeof(ngx_int_t)) != NGX_OK)
-    {
-        return NGX_ERROR;
-    }
-#endif
-
     return NGX_OK;
 }
 
@@ -1430,9 +1394,6 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 static ngx_int_t
 ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 {
-#if (NGX_HTTP_UPSTREAM_CHECK)
-    ngx_uint_t                    *idxs;
-#endif
     ngx_uint_t                     i;
     ngx_conf_t                     cf;
     ngx_http_upstream_init_pt      init;
