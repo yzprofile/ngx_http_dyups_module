@@ -947,6 +947,9 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
     if (idx == -1) {
         /* need create a new upstream */
 
+        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                      "[dyups] create upstream %V", name);
+
         duscf = ngx_array_push(&dumcf->dy_upstreams);
         if (duscf == NULL) {
             ngx_str_set(rv, "out of memory");
@@ -977,7 +980,6 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
     }
 
     /* init upstream */
-
     rc = ngx_dyups_add_server(duscf, arglist);
     if (rc != NGX_OK) {
         ngx_str_set(rv, "failed");
@@ -1079,6 +1081,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             }
 
             ngx_memzero(us, sizeof(ngx_http_upstream_server_t));
+            ngx_memzero(&u, sizeof(ngx_url_t));
 
             u.url = value[1];
             u.default_port = 80;
@@ -1093,6 +1096,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 
                 return NGX_ERROR;
             }
+
 
             for (j = 2; j < line[i].nelts; j++) {
 
@@ -2150,7 +2154,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
                            "[dyups] msg pids [%P]", msg->pid[i]);
 
             if (msg->pid[i] == ngx_pid) {
-
                 found = 1;
                 break;
             }
@@ -2334,6 +2337,9 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
         if (arglist == NULL) {
             return NGX_ERROR;
         }
+
+        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                      "[dyups]!!!!!!!!!!!!! %V", &name);
 
         rc = ngx_dyups_do_update(&name, arglist, &rv);
 
