@@ -740,6 +740,8 @@ ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    ngx_str_set(rv, "success");
+
     return NGX_HTTP_OK;
 }
 
@@ -790,7 +792,6 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
         goto finish;
     }
 
-    ngx_str_set(&rv, "success");
     status = NGX_HTTP_OK;
 
 finish:
@@ -983,6 +984,8 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    ngx_str_set(rv, "success");
+
     return NGX_HTTP_OK;
 }
 
@@ -1027,8 +1030,6 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     if (rc != NGX_HTTP_OK) {
         return rc;
     }
-
-    ngx_str_set(rv, "success");
 
     return NGX_HTTP_OK;
 }
@@ -1395,8 +1396,6 @@ static ngx_int_t
 ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 {
     ngx_uint_t                     i;
-    ngx_conf_t                     cf;
-    ngx_http_upstream_init_pt      init;
     ngx_http_upstream_server_t    *us;
     ngx_http_upstream_srv_conf_t  *uscf;
 
@@ -1408,20 +1407,6 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     }
 
     ngx_str_set(&uscf->host, "_dyups_upstream_down_host_");
-
-    cf.pool = duscf->pool;
-    cf.module_type = NGX_HTTP_MODULE;
-    cf.cmd_type = NGX_HTTP_MAIN_CONF;
-    cf.log = ngx_cycle->log;
-
-    init = uscf->peer.init_upstream ? uscf->peer.init_upstream:
-        ngx_http_upstream_init_round_robin;
-
-    if (init(&cf, uscf) != NGX_OK) {
-        ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
-                      "[dyups] delete upstream error when call init");
-        return NGX_ERROR;
-    }
 
     duscf->deleted = NGX_DYUPS_DELETING;
 
@@ -2329,6 +2314,11 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
     if (flag == NGX_DYUPS_DELETE) {
 
         rc = ngx_dyups_do_delete(&name, &rv);
+
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "[dyups] sync del: %V rv: %V rc: %i",
+                       &name, &rv, rc);
+
         if (rc != NGX_HTTP_OK) {
             return NGX_ERROR;
         }
@@ -2346,6 +2336,11 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
         }
 
         rc = ngx_dyups_do_update(&name, arglist, &rv);
+
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "[dyups] sync add: %V rv: %V rc: rc: %i",
+                       &name, &rv, rc);
+
         if (rc != NGX_HTTP_OK) {
             return NGX_ERROR;
         }
