@@ -155,7 +155,7 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       offsetof(ngx_http_dyups_main_conf_t, shm_size),
       NULL },
 
-    ngx_null_command
+      ngx_null_command
 };
 
 
@@ -363,7 +363,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
     ngx_uint_t                      i;
     ngx_http_dyups_srv_conf_t      *duscf;
     ngx_http_dyups_main_conf_t     *dmcf;
-    ngx_http_upstream_srv_conf_t  **uscfp, *uscf;
+    ngx_http_upstream_srv_conf_t  **uscfp;
     ngx_http_upstream_main_conf_t  *umcf;
 
     dmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_dyups_module);
@@ -375,12 +375,6 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 
     uscfp = umcf->upstreams.elts;
     for (i = 0; i < umcf->upstreams.nelts; i++) {
-
-        uscf = uscfp[i];
-
-#if (NGX_DEBUG)
-        ngx_log_error(NGX_LOG_EMERG, cf->log, 0, "%ui: %V", i, &uscf->host);
-#endif
 
         duscf = ngx_array_push(&dmcf->dy_upstreams);
         if (duscf == NULL) {
@@ -1244,7 +1238,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
         idx = ngx_http_upstream_check_add_dynamic_peer(duscf->pool, uscf,
                                                        us[i].addrs);
         if ((ngx_int_t) idx == NGX_ERROR) {
-            return NGX_OK;
+            continue;
         }
 
         idxp = ngx_array_push(&duscf->ucidxs);
