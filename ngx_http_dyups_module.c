@@ -740,6 +740,8 @@ ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    ngx_str_set(rv, "success");
+
     return NGX_HTTP_OK;
 }
 
@@ -790,7 +792,6 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
         goto finish;
     }
 
-    ngx_str_set(&rv, "success");
     status = NGX_HTTP_OK;
 
 finish:
@@ -946,6 +947,9 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
     if (idx == -1) {
         /* need create a new upstream */
 
+        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                      "[dyups] create upstream %V", name);
+
         duscf = ngx_array_push(&dumcf->dy_upstreams);
         if (duscf == NULL) {
             ngx_str_set(rv, "out of memory");
@@ -976,12 +980,13 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
     }
 
     /* init upstream */
-
     rc = ngx_dyups_add_server(duscf, arglist);
     if (rc != NGX_OK) {
         ngx_str_set(rv, "failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
+    ngx_str_set(rv, "success");
 
     return NGX_HTTP_OK;
 }
@@ -1027,8 +1032,6 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     if (rc != NGX_HTTP_OK) {
         return rc;
     }
-
-    ngx_str_set(rv, "success");
 
     return NGX_HTTP_OK;
 }
@@ -1078,6 +1081,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             }
 
             ngx_memzero(us, sizeof(ngx_http_upstream_server_t));
+            ngx_memzero(&u, sizeof(ngx_url_t));
 
             u.url = value[1];
             u.default_port = 80;
@@ -1092,6 +1096,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 
                 return NGX_ERROR;
             }
+
 
             for (j = 2; j < line[i].nelts; j++) {
 
@@ -1395,8 +1400,6 @@ static ngx_int_t
 ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 {
     ngx_uint_t                     i;
-    ngx_conf_t                     cf;
-    ngx_http_upstream_init_pt      init;
     ngx_http_upstream_server_t    *us;
     ngx_http_upstream_srv_conf_t  *uscf;
 
@@ -1408,20 +1411,6 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     }
 
     ngx_str_set(&uscf->host, "_dyups_upstream_down_host_");
-
-    cf.pool = duscf->pool;
-    cf.module_type = NGX_HTTP_MODULE;
-    cf.cmd_type = NGX_HTTP_MAIN_CONF;
-    cf.log = ngx_cycle->log;
-
-    init = uscf->peer.init_upstream ? uscf->peer.init_upstream:
-        ngx_http_upstream_init_round_robin;
-
-    if (init(&cf, uscf) != NGX_OK) {
-        ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
-                      "[dyups] delete upstream error when call init");
-        return NGX_ERROR;
-    }
 
     duscf->deleted = NGX_DYUPS_DELETING;
 
@@ -2174,7 +2163,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
                            "[dyups] msg pids [%P]", msg->pid[i]);
 
             if (msg->pid[i] == ngx_pid) {
-
                 found = 1;
                 break;
             }
@@ -2338,6 +2326,11 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
     if (flag == NGX_DYUPS_DELETE) {
 
         rc = ngx_dyups_do_delete(&name, &rv);
+
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "[dyups] sync del: %V rv: %V rc: %i",
+                       &name, &rv, rc);
+
         if (rc != NGX_HTTP_OK) {
             return NGX_ERROR;
         }
@@ -2354,7 +2347,15 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
             return NGX_ERROR;
         }
 
+        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                      "[dyups]!!!!!!!!!!!!! %V", &name);
+
         rc = ngx_dyups_do_update(&name, arglist, &rv);
+
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "[dyups] sync add: %V rv: %V rc: rc: %i",
+                       &name, &rv, rc);
+
         if (rc != NGX_HTTP_OK) {
             return NGX_ERROR;
         }
