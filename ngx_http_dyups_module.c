@@ -1408,20 +1408,15 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     us = uscf->servers->elts;
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
+
+#if (NGX_HTTP_UPSTREAM_CHECK)
+        ngx_http_upstream_check_delete_dynamic_peer(&uscf->host, us[i].addrs);
+#endif
     }
 
     ngx_str_set(&uscf->host, "_dyups_upstream_down_host_");
 
     duscf->deleted = NGX_DYUPS_DELETING;
-
-#if (NGX_HTTP_UPSTREAM_CHECK)
-
-    idxs = duscf->ucidxs.elts;
-    for(i = 0; i < duscf->ucidxs.nelts; i++) {
-        ngx_http_upstream_check_delete_dynamic_peer(idxs[i]);
-    }
-
-#endif
 
     return NGX_OK;
 }
