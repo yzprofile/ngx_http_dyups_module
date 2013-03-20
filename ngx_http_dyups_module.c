@@ -552,7 +552,7 @@ ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
     status = buf ? NGX_HTTP_OK : NGX_HTTP_NOT_FOUND;
 
 finish:
-    if ( buf == NULL || ngx_buf_size(buf) == 0) {
+    if (buf == NULL || ngx_buf_size(buf) == 0) {
         status = NGX_HTTP_NO_CONTENT;
     }
 
