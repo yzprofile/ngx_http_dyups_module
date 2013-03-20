@@ -552,7 +552,7 @@ ngx_http_dyups_do_get(ngx_http_request_t *r, ngx_array_t *resource)
     status = buf ? NGX_HTTP_OK : NGX_HTTP_NOT_FOUND;
 
 finish:
-    if (ngx_buf_size(buf) == 0) {
+    if ( buf == NULL || ngx_buf_size(buf) == 0) {
         status = NGX_HTTP_NO_CONTENT;
     }
 
@@ -1413,7 +1413,7 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
 
-#if (NGX_HTTP_UPSTREAM_CHECK_DYNAMIC)
+#if (NGX_HTTP_UPSTREAM_CHECK)
         ngx_http_upstream_check_delete_dynamic_peer(&uscf->host, us[i].addrs);
 #endif
     }
