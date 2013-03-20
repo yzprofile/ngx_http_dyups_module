@@ -1414,7 +1414,7 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
 
-#if (NGX_HTTP_UPSTREAM_CHECK)
+#if (NGX_HTTP_UPSTREAM_CHECK_DYNAMIC)
         ngx_http_upstream_check_delete_dynamic_peer(&uscf->host, us[i].addrs);
 #endif
     }
