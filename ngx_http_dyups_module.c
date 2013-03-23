@@ -948,6 +948,10 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
                                                 ngx_http_dyups_module);
 
     duscf = ngx_dyups_find_upstream(name, &idx);
+    if (duscf) {
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "[dyups] upstream reuse");
+    }
 
     if (idx == -1) {
         /* need create a new upstream */
@@ -969,12 +973,6 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
 
         ngx_memzero(duscf, sizeof(ngx_http_dyups_srv_conf_t));
         idx = umcf->upstreams.nelts - 1;
-    }
-
-    if (duscf->deleted) {
-        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                       "[dyups] upstream reuse");
-        duscf->deleted = 0;
     }
 
     rc = ngx_dyups_init_upstream(duscf, name, idx);
@@ -1250,6 +1248,9 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
     *idx = -1;
     duscf_del = NULL;
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] find dynamic upstream");
+
     duscfs = dumcf->dy_upstreams.elts;
     for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
 
@@ -1289,6 +1290,8 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
         }
 
         if (duscf->count != NULL && *(duscf->count) != 0) {
+            ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                           "[dyups] delete upstream in find function");
             (void) ngx_dyups_delete_upstream(duscf);
             continue;
         }
@@ -1320,6 +1323,24 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     uscfp = umcf->upstreams.elts;
 
     if (duscf->pool) {
+#if (NGX_HTTP_UPSTREAM_CHECK)
+        ngx_uint_t                   i;
+        ngx_http_upstream_server_t  *us;
+
+        if (!duscf->deleted) {
+
+            ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
+                          "[dyups] delete in init upstream");
+
+            uscf = duscf->upstream;
+            us = uscf->servers->elts;
+
+            for (i = 0; i < uscf->servers->nelts; i++) {
+                ngx_http_upstream_check_delete_dynamic_peer(&uscf->host,
+                                                            us[i].addrs);
+            }
+        }
+#endif
         ngx_destroy_pool(duscf->pool);
     }
 
@@ -1396,6 +1417,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     dscf = uscf->srv_conf[ngx_http_dyups_module.ctx_index];
     duscf->count = &dscf->count;
     duscf->ctx = ctx;
+    duscf->deleted = 0;
 
     return NGX_OK;
 }
@@ -1414,7 +1436,7 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
 
-#if (NGX_HTTP_UPSTREAM_CHECK_DYNAMIC)
+#if (NGX_HTTP_UPSTREAM_CHECK)
         ngx_http_upstream_check_delete_dynamic_peer(&uscf->host, us[i].addrs);
 #endif
     }
@@ -2346,9 +2368,6 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
         if (arglist == NULL) {
             return NGX_ERROR;
         }
-
-        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                      "[dyups]!!!!!!!!!!!!! %V", &name);
 
         rc = ngx_dyups_do_update(&name, arglist, &rv);
 
