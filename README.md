@@ -162,5 +162,5 @@ TODO:
 
 3. support `weight`,`max_fails`,`fail_timeout`,`backup` `done`
 
-4. support health check module
+4. support health check module, you should use (this branch of Tengine)[https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check] or wait for it's release. 'done'
 
