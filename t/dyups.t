@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(61);
+my $t = Test::Nginx->new()->plan(68);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -274,6 +274,19 @@ like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127
 like(mhttp_post('/upstream/dyhost', 'server unix:/tmp/dyupssocket;', 8081), qr/success/m, '2013-03-05 16:13:11');
 like(mhttp_get('/', 'dyhost', 8080), qr/unix/m, '2013-03-05 16:13:23');
 
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;check interval=3000 rise=2 fall=5 timeout=1000 type=http default_down=false;', 8081),
+     qr/success/m, '2013-03-25 10:29:48');
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-25 10:39:02');
+like(mhttp_delete('/upstream/dyhost', 8081), qr/success/m, '2013-03-25 10:39:28');
+
+like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088;check interval=1000 rise=2 fall=5 timeout=1000 type=http default_down=true;', 8081),
+     qr/success/m, '2013-03-25 10:49:44');
+like(mhttp_get('/', 'dyhost', 8080), qr/502/m, '2013-03-25 10:49:47');
+sleep(2);
+like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-25 10:50:41');
+like(mhttp_delete('/upstream/dyhost', 8081), qr/success/m, '2013-03-25 10:49:51');
+
+
 $t->stop();
 unlink("/tmp/dyupssocket");
 
@@ -308,7 +321,7 @@ http {
             proxy_pass http://$host;
         }
     }
-    
+
     server {
         listen 8088;
         location / {
