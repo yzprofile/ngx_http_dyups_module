@@ -27,6 +27,7 @@ typedef struct {
 
 typedef struct {
     ngx_flag_t                     enable;
+    ngx_flag_t                     trylock;
     ngx_array_t                    dy_upstreams;/* ngx_http_dyups_srv_conf_t */
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
@@ -139,7 +140,7 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       NULL },
 
     { ngx_string("dyups_read_msg_timeout"),
-      NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
+      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_msec_slot,
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_http_dyups_main_conf_t, read_msg_timeout),
@@ -150,6 +151,13 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       ngx_conf_set_size_slot,
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_http_dyups_main_conf_t, shm_size),
+      NULL },
+
+    { ngx_string("dyups_trylock"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_http_dyups_main_conf_t, trylock),
       NULL },
 
       ngx_null_command
@@ -238,6 +246,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     dmcf->enable = NGX_CONF_UNSET;
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
     dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
+    dmcf->trylock = NGX_CONF_UNSET;
 
     return dmcf;
 }
@@ -249,6 +258,7 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
     ngx_http_dyups_main_conf_t  *dmcf = conf;
 
     dmcf->enable = dmcf->enable == NGX_CONF_UNSET ? 0 : 1;
+    dmcf->trylock = dmcf->trylock == NGX_CONF_UNSET ? 0 : 1;
 
     if (dmcf->read_msg_timeout) {
         dmcf->read_msg_timeout = 1000;
@@ -449,7 +459,9 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
     ngx_array_t                 *res;
     ngx_event_t                 *timer;
     ngx_slab_pool_t             *shpool;
+    ngx_http_dyups_main_conf_t  *dmcf;
 
+    dmcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
     timer = &ngx_dyups_global_ctx.msg_timer;
     shpool = ngx_dyups_global_ctx.shpool;
 
@@ -465,16 +477,18 @@ ngx_http_dyups_interface_handler(ngx_http_request_t *r)
 
     if (r->method == NGX_HTTP_DELETE) {
 
-#if NGX_DEBUG
+        if (!dmcf->trylock) {
 
-        ngx_shmtx_lock(&shpool->mutex);
+            ngx_shmtx_lock(&shpool->mutex);
 
-#else
-        if (!ngx_shmtx_trylock(&shpool->mutex)) {
-            return NGX_HTTP_CONFLICT;
+        } else {
+
+            if (!ngx_shmtx_trylock(&shpool->mutex)) {
+                return NGX_HTTP_CONFLICT;
+            }
+
         }
 
-#endif
         ngx_http_dyups_read_msg_locked(timer);
         rc = ngx_http_dyups_do_delete(r, res);
 
@@ -847,13 +861,15 @@ ngx_http_dyups_interface_read_body(ngx_http_request_t *r)
 static void
 ngx_http_dyups_body_handler(ngx_http_request_t *r)
 {
-    ngx_str_t         rv;
-    ngx_int_t         status;
-    ngx_buf_t        *body;
-    ngx_event_t      *timer;
-    ngx_array_t      *arglist, *res;
-    ngx_slab_pool_t  *shpool;
+    ngx_str_t                    rv;
+    ngx_int_t                    status;
+    ngx_buf_t                   *body;
+    ngx_event_t                 *timer;
+    ngx_array_t                 *arglist, *res;
+    ngx_slab_pool_t             *shpool;
+    ngx_http_dyups_main_conf_t  *dmcf;
 
+    dmcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
     timer = &ngx_dyups_global_ctx.msg_timer;
     shpool = ngx_dyups_global_ctx.shpool;
 
@@ -900,18 +916,20 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
         goto finish;
     }
 
-#if (NGX_DEBUG)
 
-    ngx_shmtx_lock(&shpool->mutex);
+    if (!dmcf->trylock) {
 
-#else
-    if (!ngx_shmtx_trylock(&shpool->mutex)) {
-        status = NGX_HTTP_CONFLICT;
-        ngx_str_set(&rv, "wait and try again\n");
-        goto finish;
+        ngx_shmtx_lock(&shpool->mutex);
+
+    } else {
+
+        if (!ngx_shmtx_trylock(&shpool->mutex)) {
+            status = NGX_HTTP_CONFLICT;
+            ngx_str_set(&rv, "wait and try again\n");
+            goto finish;
+        }
     }
 
-#endif
     ngx_http_dyups_read_msg_locked(timer);
 
     status = ngx_http_dyups_do_post(r, res, arglist, &rv);
