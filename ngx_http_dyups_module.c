@@ -1426,6 +1426,10 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
                  |NGX_HTTP_UPSTREAM_BACKUP;
 
     uscf->host.data = ngx_pstrdup(duscf->pool, name);
+    if (uscf->host.data == NULL) {
+        return NGX_ERROR;
+    }
+
     uscf->host.len = name->len;
     uscf->file_name = (u_char *) "dynamic_upstream";
     uscf->line = 0;
