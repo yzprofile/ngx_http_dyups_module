@@ -1215,6 +1215,8 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
 
         } else {
 
+            ngx_memzero(&cf, sizeof(ngx_conf_t));
+            cf.name = "dyups_init_module_conf";
             cf.pool = duscf->pool;
             cf.module_type = NGX_HTTP_MODULE;
             cf.cmd_type = NGX_HTTP_UPS_CONF;
@@ -1264,14 +1266,17 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
                         != NGX_CONF_OK)
                     {
                         ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
-                                      "[dyups] set upstream \"%V\"",
+                                      "[dyups] set upstream \"%V\" error!",
                                       &cmd->name);
+                        return NGX_ERROR;
                     }
                 }
             }
         }
     }
 
+    ngx_memzero(&cf, sizeof(ngx_conf_t));
+    cf.name = "dyups_init_upstream";
     cf.pool = duscf->pool;
     cf.module_type = NGX_HTTP_MODULE;
     cf.cmd_type = NGX_HTTP_MAIN_CONF;
