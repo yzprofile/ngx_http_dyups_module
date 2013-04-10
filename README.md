@@ -152,9 +152,7 @@ host2
 server 127.0.0.1:8089
 ```
 
-## developing
-
-TODO:
+## RELEASE V0.1.0
 
 1. check every commands to make sure they are all ok before update upstream. `done`
 
