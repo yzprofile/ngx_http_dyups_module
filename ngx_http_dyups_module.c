@@ -1083,8 +1083,8 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
 
     name = value[1];
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "[dyups] upstream name: %V", &name);
+    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                   "[dyups] post upstream name: %V", &name);
 
     rc = ngx_http_dyups_check_commands(arglist);
     if (rc != NGX_OK) {
@@ -1330,7 +1330,7 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
         {
             if (duscf->pool) {
 
-                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                                "[dyups] free dynamic upstream");
 
                 ngx_destroy_pool(duscf->pool);
@@ -1395,7 +1395,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 
         if (!duscf->deleted) {
 
-            ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
+            ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                           "[dyups] delete in init upstream");
 
             uscf = duscf->upstream;
@@ -2153,7 +2153,7 @@ ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
 
     ctx->scf->count++;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream get handler count %i",
                    ctx->scf->count);
 
@@ -2169,7 +2169,7 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
 
     ctx->scf->count--;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream free handler count %i",
                    ctx->scf->count);
 
@@ -2446,9 +2446,9 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
 
         rc = ngx_dyups_do_update(&name, arglist, &rv);
 
-        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                       "[dyups] sync add: %V rv: %V rc: rc: %i",
-                       &name, &rv, rc);
+        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                      "[dyups] sync add: %V rv: %V rc: rc: %i",
+                      &name, &rv, rc);
 
         if (rc != NGX_HTTP_OK) {
             return NGX_ERROR;
