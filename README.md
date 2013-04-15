@@ -162,3 +162,13 @@ server 127.0.0.1:8089
 
 4. support health check module, you should use [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) or wait for it's release. `done`
 
+
+## Run Tests
+
+```bash
+$ cd /path/to/nginx-tests
+
+$ ln /path/to/dynamic_upstream_dir/t/dyups.t ./
+
+$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove ./dyups.t
+```
