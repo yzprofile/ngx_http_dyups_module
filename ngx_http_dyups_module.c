@@ -33,6 +33,7 @@ typedef struct {
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
     ngx_msec_t                     read_msg_timeout;
+    ngx_str_t                      conf_path;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -131,6 +132,7 @@ static ngx_int_t ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path,
     ngx_str_t *content, ngx_uint_t flag);
 static ngx_array_t *ngx_dyups_parse_path(ngx_pool_t *pool, ngx_str_t *path);
 static ngx_int_t ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv);
+static ngx_array_t *ngx_dyups_copy_args(ngx_pool_t *pool, ngx_array_t *arglist);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -154,6 +156,13 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       ngx_conf_set_size_slot,
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_http_dyups_main_conf_t, shm_size),
+      NULL },
+
+    { ngx_string("dyups_upstream_conf"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_http_dyups_main_conf_t, conf_path),
       NULL },
 
     { ngx_string("dyups_trylock"),
@@ -251,6 +260,10 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
     dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
     dmcf->trylock = NGX_CONF_UNSET;
+
+    /*
+      dmcf->conf_path = nil
+     */
 
     return dmcf;
 }
@@ -475,6 +488,8 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
     if (sh->version != 0) {
         ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
                       "[dyups] process start after exit abnormal exits");
+
+//        return ngx_dyups_restore_upstreams(&dmcf->conf_path);
     }
 
     return NGX_OK;
@@ -1051,6 +1066,12 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
 
     if (rc != NGX_OK) {
         ngx_str_set(rv, "failed");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    arglist = ngx_dyups_copy_args(duscf->pool, arglist);
+    if (arglist == NULL) {
+        ngx_str_set(rv, "out of memory");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -2480,4 +2501,56 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
     }
 
     return NGX_ERROR;
+}
+
+
+static ngx_array_t *
+ngx_dyups_copy_args(ngx_pool_t *pool, ngx_array_t *arglist)
+{
+    ngx_int_t     rc;
+    ngx_str_t    *s, *st;
+    ngx_uint_t    i, j;
+    ngx_array_t  *al, *as, *ast;
+
+    al = ngx_array_create(pool, arglist->nelts, sizeof(ngx_array_t));
+    if (al == NULL) {
+        return NULL;
+    }
+
+    ast = arglist->elts;
+
+    for (i = 0; i < arglist->nelts; i++) {
+
+        as = ngx_array_push(al);
+
+        if (as == NULL) {
+            return NULL;
+        }
+
+        rc = ngx_array_init(as, pool, ast[i].nelts, sizeof(ngx_str_t));
+        if (rc != NGX_OK) {
+            return NULL;
+        }
+
+        st = ast[i].elts;
+
+        for (j = 0; j < ast[i].nelts; j++) {
+
+            s = ngx_array_push(as);
+
+            if (s == NULL) {
+                return NULL;
+            }
+
+            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pool->log, 0,
+                           "[dyups] copy arg: %V", &st[j]);
+
+            s->data = ngx_pcalloc(pool, st[j].len + 1);
+
+            ngx_memcpy(s->data, st[j].data, st[j].len);
+            s->len = st[j].len;
+        }
+    }
+
+    return al;
 }
