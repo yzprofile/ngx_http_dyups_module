@@ -52,6 +52,7 @@ typedef struct {
 
 typedef struct ngx_dyups_shctx_s {
     ngx_queue_t                          msg_queue;
+    ngx_uint_t                           version;
     /* status ? */
 } ngx_dyups_shctx_t;
 
@@ -60,6 +61,7 @@ typedef struct ngx_dyups_global_ctx_s {
     ngx_event_t                          msg_timer;
     ngx_slab_pool_t                     *shpool;
     ngx_dyups_shctx_t                   *sh;
+    ngx_uint_t                           version;
 } ngx_dyups_global_ctx_t;
 
 
@@ -344,6 +346,7 @@ ngx_http_dyups_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
     ngx_dyups_global_ctx.shpool = shpool;
 
     ngx_queue_init(&sh->msg_queue);
+    sh->version = 0;
 
     return NGX_OK;
 }
@@ -452,6 +455,7 @@ static ngx_int_t
 ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 {
     ngx_event_t                 *timer;
+    ngx_dyups_shctx_t           *sh;
     ngx_http_dyups_main_conf_t  *dmcf;
 
     dmcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
@@ -465,6 +469,13 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
     timer->data = dmcf;
 
     ngx_add_timer(timer, dmcf->read_msg_timeout);
+
+    sh = ngx_dyups_global_ctx.sh;
+
+    if (sh->version != 0) {
+        ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
+                      "[dyups] process start after exit abnormal exits");
+    }
 
     return NGX_OK;
 }
@@ -2199,16 +2210,16 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
 static void
 ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 {
-    ngx_int_t                    i, rc;
-    ngx_str_t                    path, content;
-    ngx_flag_t                   found;
-    ngx_pool_t                  *pool;
-    ngx_queue_t                 *q, *t;
-    ngx_array_t                  msgs;
-    ngx_core_conf_t             *ccf;
-    ngx_slab_pool_t             *shpool;
-    ngx_dyups_msg_t             *msg;
-    ngx_dyups_shctx_t           *sh;
+    ngx_int_t           i, rc;
+    ngx_str_t           path, content;
+    ngx_flag_t          found;
+    ngx_pool_t         *pool;
+    ngx_queue_t        *q, *t;
+    ngx_array_t         msgs;
+    ngx_core_conf_t    *ccf;
+    ngx_slab_pool_t    *shpool;
+    ngx_dyups_msg_t    *msg;
+    ngx_dyups_shctx_t  *sh;
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ev->log, 0,
                    "[dyups] read msg %P", ngx_pid);
@@ -2295,6 +2306,8 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 
     ngx_destroy_pool(pool);
 
+    ngx_dyups_global_ctx.version = sh->version;
+
     return;
 
 failed:
@@ -2362,8 +2375,17 @@ ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
         msg->content.len = 0;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                   "[dyups] send msg %V count %ui", &msg->path, msg->count);
+    sh->version++;
+
+    if (sh->version == 0) {
+        sh->version = 1;
+    };
+
+    ngx_dyups_global_ctx.version = sh->version;
+
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] send msg %V count %ui version: %ui",
+                   &msg->path, msg->count, sh->version);
 
     ngx_queue_insert_head(&sh->msg_queue, &msg->queue);
 
