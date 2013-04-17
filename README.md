@@ -172,3 +172,8 @@ $ ln /path/to/dynamic_upstream_dir/t/dyups.t ./
 
 $ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove ./dyups.t
 ```
+
+
+## TODO V0.2.0
+
+Read upstream configuration in `init process` handler
