@@ -30,10 +30,10 @@ typedef struct {
     ngx_flag_t                     enable;
     ngx_flag_t                     trylock;
     ngx_array_t                    dy_upstreams;/* ngx_http_dyups_srv_conf_t */
+    ngx_str_t                      conf_path;
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
     ngx_msec_t                     read_msg_timeout;
-    ngx_str_t                      conf_path;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -132,6 +132,8 @@ static ngx_int_t ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path,
     ngx_str_t *content, ngx_uint_t flag);
 static ngx_array_t *ngx_dyups_parse_path(ngx_pool_t *pool, ngx_str_t *path);
 static ngx_int_t ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv);
+static ngx_int_t ngx_dyups_restore_upstreams(ngx_cycle_t *cycle,
+    ngx_str_t *path);
 static ngx_array_t *ngx_dyups_copy_args(ngx_pool_t *pool, ngx_array_t *arglist);
 
 
@@ -159,7 +161,7 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       NULL },
 
     { ngx_string("dyups_upstream_conf"),
-      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_http_dyups_main_conf_t, conf_path),
@@ -467,6 +469,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 {
+    ngx_int_t                    rc;
     ngx_event_t                 *timer;
     ngx_dyups_shctx_t           *sh;
     ngx_http_dyups_main_conf_t  *dmcf;
@@ -485,12 +488,17 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 
     sh = ngx_dyups_global_ctx.sh;
 
-    if (sh->version != 0) {
+//    if (sh->version != 0) {
         ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
-                      "[dyups] process start after exit abnormal exits");
+                      "[dyups] process start after abnormal exits");
 
-//        return ngx_dyups_restore_upstreams(&dmcf->conf_path);
-    }
+        rc = ngx_dyups_restore_upstreams(cycle, &dmcf->conf_path);
+
+        if (rc != NGX_OK) {
+            ngx_log_error(NGX_LOG_CRIT, cycle->log, 0,
+                          "[dyups] process restore upstream failed");
+        }
+//    }
 
     return NGX_OK;
 }
@@ -2553,4 +2561,89 @@ ngx_dyups_copy_args(ngx_pool_t *pool, ngx_array_t *arglist)
     }
 
     return al;
+}
+
+
+static ngx_int_t
+ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
+{
+    off_t             file_size;
+    ssize_t           n, size;
+    ngx_str_t         full;
+    ngx_buf_t        *buf;
+    ngx_file_t        file;
+    ngx_file_info_t   fi;
+
+    if (path->len == 0) {
+        return NGX_OK;
+    }
+
+    full = *path;
+
+    if (ngx_conf_full_name(cycle, &full, 0) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    ngx_memzero(&file, sizeof(ngx_file_t));
+
+    file.name = *path;
+    file.log = cycle->log;
+
+    file.fd = ngx_open_file(full.data, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
+    if (file.fd == NGX_INVALID_FILE) {
+        ngx_log_error(NGX_LOG_CRIT, cycle->log, ngx_errno,
+                      ngx_open_file_n " \"%V\" failed", &full);
+        return NGX_ERROR;
+    }
+
+    if (ngx_fd_info(file.fd, &fi) == NGX_FILE_ERROR) {
+        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                      ngx_fd_info_n " \"%V\" failed", path);
+        return NGX_ERROR;
+    }
+
+    file_size = ngx_file_size(&fi);
+
+    buf = ngx_create_temp_buf(cycle->pool, file_size);
+
+    if (buf == NULL) {
+        return NGX_ERROR;
+    }
+
+    for ( ;; ) {
+
+        size = (ssize_t) (file_size - file.offset);
+
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, cycle->log, 0,
+                       "[dyups] read size: %i", size);
+
+        if (size <= 0) {
+            break;
+        }
+
+        n = ngx_read_file(&file, buf->last, size, file.offset);
+
+        if (n == NGX_ERROR) {
+            return NGX_ERROR;
+        }
+
+        if (n != size) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
+                          ngx_read_file_n " returned "
+                          "only %z bytes instead of %z",
+                          n, size);
+            return NGX_ERROR;
+        }
+
+        buf->last += size;
+    }
+
+#if (NGX_DEBUG)
+    u_char  *p;
+    for (p = buf->pos; p < buf->last; p++) {
+        fprintf(stderr, "%c", *p);
+    }
+#endif
+
+    return NGX_OK;
 }
