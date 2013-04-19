@@ -3,6 +3,8 @@ This module can be used to update your upstream-list without reloadding Nginx.
 
 ### Config Example
 
+file: conf/nginx.conf
+
     daemon off;
     error_log logs/error.log debug;
 
@@ -11,13 +13,9 @@ This module can be used to update your upstream-list without reloadding Nginx.
 
     http {
 
-        upstream host1 {
-            server 127.0.0.1:8088;
-        }
-        
-        upstream host2 {
-            server 127.0.0.1:8089;
-        }
+        dyups_upstream_conf  conf/upstream.conf;
+
+        include conf/upstream.conf;
 
         server {
             listen   8080;
@@ -48,6 +46,18 @@ This module can be used to update your upstream-list without reloadding Nginx.
             }
         }
     }
+
+
+file: conf/upstream.conf
+
+    upstream host1 {
+        server 127.0.0.1:8088;
+    }
+        
+    upstream host2 {
+        server 127.0.0.1:8089;
+    }
+    
 
 ## Installation
 ```bash
@@ -86,13 +96,13 @@ Context: `main`
 This directive set the size of share memory which used to store the commands.
 
 
-Syntax: **ddyups_upstream_conf** `path`
+Syntax: **dyups_upstream_conf** `path`
 
 Default: `none`
 
 Context: `main`
 
-This directive set the path of file which you dumped all of upstreams' configs, it will be loaded in `init process` after process respwan.
+This directive set the path of file which you dumped all of upstreams' configs, it will be loaded in `init process` after process respwan to restore upstreams.
 
 
 ## restful interface
