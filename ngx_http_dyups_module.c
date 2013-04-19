@@ -51,10 +51,16 @@ typedef struct {
 } ngx_http_dyups_ctx_t;
 
 
+typedef struct ngx_dyups_status_s {
+    ngx_pid_t                            pid;
+    ngx_msec_t                           time;
+} ngx_dyups_status_t;
+
+
 typedef struct ngx_dyups_shctx_s {
     ngx_queue_t                          msg_queue;
     ngx_uint_t                           version;
-    /* status ? */
+    ngx_dyups_status_t                  *status;
 } ngx_dyups_shctx_t;
 
 
@@ -138,6 +144,7 @@ static ngx_buf_t * ngx_dyups_read_upstream_conf(ngx_cycle_t *cycle,
     ngx_str_t *path);
 static ngx_int_t ngx_dyups_do_restore_upstream(ngx_buf_t *ups,
     ngx_buf_t *block);
+static void ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -364,7 +371,9 @@ ngx_http_dyups_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
     ngx_dyups_global_ctx.shpool = shpool;
 
     ngx_queue_init(&sh->msg_queue);
+
     sh->version = 0;
+    sh->status = NULL;
 
     return NGX_OK;
 }
@@ -472,10 +481,18 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 {
-    ngx_int_t                    rc;
+    ngx_int_t                    rc, i;
+    ngx_pid_t                    pid;
+    ngx_time_t                  *tp;
+    ngx_msec_t                   now;
     ngx_event_t                 *timer;
+    ngx_core_conf_t             *ccf;
+    ngx_slab_pool_t             *shpool;
     ngx_dyups_shctx_t           *sh;
+    ngx_dyups_status_t          *status;
     ngx_http_dyups_main_conf_t  *dmcf;
+
+    ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
 
     dmcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
                                                ngx_http_dyups_module);
@@ -489,21 +506,68 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 
     ngx_add_timer(timer, dmcf->read_msg_timeout);
 
+    shpool = ngx_dyups_global_ctx.shpool;
     sh = ngx_dyups_global_ctx.sh;
 
-#if (NGX_DEBUG)
-    if (1) {
-#else
+    if (sh->status == NULL) {
+        sh->status = ngx_slab_alloc(shpool,
+                           sizeof(ngx_dyups_status_t) * ccf->worker_processes);
+
+        if (sh->status == NULL) {
+            return NGX_ERROR;
+        }
+
+        ngx_memzero(sh->status, sizeof(ngx_msec_t) * ccf->worker_processes);
+
+        return NGX_OK;
+    }
+
     if (sh->version != 0) {
-#endif
         ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
                       "[dyups] process start after abnormal exits");
 
-        ngx_shmtx_lock(&ngx_dyups_global_ctx.shpool->mutex);
+        ngx_msleep(dmcf->read_msg_timeout * 2);
+
+        ngx_time_update();
+        tp = ngx_timeofday();
+        now = (ngx_msec_t) (tp->sec * 1000 + tp->msec);
+
+        ngx_shmtx_lock(&shpool->mutex);
+
+        if (sh->status == NULL) {
+            return NGX_OK;
+        }
+
+        status = &sh->status[0];
+
+        for (i = 1; i < ccf->worker_processes; i++) {
+
+            ngx_log_error(NGX_LOG_WARN, cycle->log, 0,
+                          "[dyups] %ui %ui", status->time, status[i].time);
+
+            if (status->time > sh->status[i].time) {
+                status = &status[i];
+            }
+        }
+
+        pid = status->pid;
+        status->time = now;
+        status->pid = ngx_pid;
+
+        ngx_log_error(NGX_LOG_WARN, cycle->log, 0,
+                      "[dyups] new process is %P, old process is %P",
+                      ngx_pid, pid);
+
+        ngx_dyups_purge_msg(pid, ngx_pid);
+
+        ngx_shmtx_unlock(&shpool->mutex);
+
+
+        ngx_shmtx_lock(&shpool->mutex);
 
         rc = ngx_dyups_restore_upstreams(cycle, &dmcf->conf_path);
 
-        ngx_shmtx_unlock(&ngx_dyups_global_ctx.shpool->mutex);
+        ngx_shmtx_unlock(&shpool->mutex);
 
         if (rc != NGX_OK) {
             ngx_log_error(NGX_LOG_CRIT, cycle->log, 0,
@@ -512,6 +576,40 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
     }
 
     return NGX_OK;
+}
+
+
+static void
+ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid)
+{
+    ngx_int_t            i;
+    ngx_queue_t         *q;
+    ngx_core_conf_t     *ccf;
+    ngx_slab_pool_t     *shpool;
+    ngx_dyups_msg_t     *msg;
+    ngx_dyups_shctx_t   *sh;
+
+    ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                           ngx_core_module);
+    sh = ngx_dyups_global_ctx.sh;
+    shpool = ngx_dyups_global_ctx.shpool;
+
+    for (q = ngx_queue_last(&sh->msg_queue);
+         q != ngx_queue_sentinel(&sh->msg_queue);
+         q = ngx_queue_prev(q))
+    {
+        msg = ngx_queue_data(q, ngx_dyups_msg_t, queue);
+
+        for (i = 0; i < msg->count; i++) {
+            if (msg->pid[i] == opid) {
+
+                ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                              "[dyups] restore one pid conflict"
+                              " old: %P, new: %P", msg->pid[i]);
+                msg->pid[i] = npid;
+            }
+        }
+    }
 }
 
 
@@ -531,7 +629,6 @@ ngx_http_dyups_exit_process(ngx_cycle_t *cycle)
         duscf = &duscfs[i];
 
         if (duscf->pool) {
-
             ngx_destroy_pool(duscf->pool);
             duscf->pool = NULL;
         }
@@ -2250,16 +2347,19 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
 static void
 ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 {
-    ngx_int_t           i, rc;
-    ngx_str_t           path, content;
-    ngx_flag_t          found;
-    ngx_pool_t         *pool;
-    ngx_queue_t        *q, *t;
-    ngx_array_t         msgs;
-    ngx_core_conf_t    *ccf;
-    ngx_slab_pool_t    *shpool;
-    ngx_dyups_msg_t    *msg;
-    ngx_dyups_shctx_t  *sh;
+    ngx_int_t            i, rc;
+    ngx_str_t            path, content;
+    ngx_flag_t           found;
+    ngx_time_t          *tp;
+    ngx_pool_t          *pool;
+    ngx_msec_t           now;
+    ngx_queue_t         *q, *t;
+    ngx_array_t          msgs;
+    ngx_core_conf_t     *ccf;
+    ngx_slab_pool_t     *shpool;
+    ngx_dyups_msg_t     *msg;
+    ngx_dyups_shctx_t   *sh;
+    ngx_dyups_status_t  *status;
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ev->log, 0,
                    "[dyups] read msg %P", ngx_pid);
@@ -2269,6 +2369,24 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 
     sh = ngx_dyups_global_ctx.sh;
     shpool = ngx_dyups_global_ctx.shpool;
+
+    tp = ngx_timeofday();
+    now = (ngx_msec_t) (tp->sec * 1000 + tp->msec);
+
+    for (i = 0; i < ccf->worker_processes; i++) {
+        status = &sh->status[i];
+
+        if (status->pid == 0 || status->pid == ngx_pid) {
+
+            ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ev->log, 0,
+                           "[dyups] process %P update time %ui",
+                           status->pid, status->time);
+
+            status->pid = ngx_pid;
+            status->time = now;
+            break;
+        }
+    }
 
     if (ngx_queue_empty(&sh->msg_queue)) {
         return;
@@ -2285,13 +2403,11 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
         goto failed;
     }
 
-
     for (q = ngx_queue_last(&sh->msg_queue);
          q != ngx_queue_sentinel(&sh->msg_queue);
          q = ngx_queue_prev(q))
     {
         msg = ngx_queue_data(q, ngx_dyups_msg_t, queue);
-
 
         if (msg->count == ccf->worker_processes) {
             t = ngx_queue_next(q); ngx_queue_remove(q); q = t;
