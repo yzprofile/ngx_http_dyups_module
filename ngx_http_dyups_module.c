@@ -2818,6 +2818,8 @@ ngx_dyups_do_restore_upstream(ngx_buf_t *ups, ngx_buf_t *block)
         goto failed;
     }
 
+    ngx_destroy_pool(pool);
+
     return NGX_OK;
 
 failed:

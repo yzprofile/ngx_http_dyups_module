@@ -85,6 +85,16 @@ Context: `main`
 
 This directive set the size of share memory which used to store the commands.
 
+
+Syntax: **ddyups_upstream_conf** `path`
+
+Default: `none`
+
+Context: `main`
+
+This directive set the path of file which you dumped all of upstreams' configs, it will be loaded in `init process` after process respwan.
+
+
 ## restful interface
 
 ### GET
@@ -176,4 +186,4 @@ $ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove ./dyups.t
 
 ## TODO V0.2.0
 
-Read upstream configuration in `init process` handler
+Read upstream configuration in `init process` handler. `done`
