@@ -62,7 +62,6 @@ typedef struct ngx_dyups_global_ctx_s {
     ngx_event_t                          msg_timer;
     ngx_slab_pool_t                     *shpool;
     ngx_dyups_shctx_t                   *sh;
-    ngx_uint_t                           version;
 } ngx_dyups_global_ctx_t;
 
 
@@ -492,17 +491,25 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 
     sh = ngx_dyups_global_ctx.sh;
 
-//    if (sh->version != 0) {
+#if (NGX_DEBUG)
+    if (1) {
+#else
+    if (sh->version != 0) {
+#endif
         ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
                       "[dyups] process start after abnormal exits");
 
+        ngx_shmtx_lock(&ngx_dyups_global_ctx.shpool->mutex);
+
         rc = ngx_dyups_restore_upstreams(cycle, &dmcf->conf_path);
+
+        ngx_shmtx_unlock(&ngx_dyups_global_ctx.shpool->mutex);
 
         if (rc != NGX_OK) {
             ngx_log_error(NGX_LOG_CRIT, cycle->log, 0,
                           "[dyups] process restore upstream failed");
         }
-//    }
+    }
 
     return NGX_OK;
 }
@@ -2339,8 +2346,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
 
     ngx_destroy_pool(pool);
 
-    ngx_dyups_global_ctx.version = sh->version;
-
     return;
 
 failed:
@@ -2413,8 +2418,6 @@ ngx_http_dyups_send_msg(ngx_str_t *path, ngx_buf_t *body, ngx_uint_t flag)
     if (sh->version == 0) {
         sh->version = 1;
     };
-
-    ngx_dyups_global_ctx.version = sh->version;
 
     ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] send msg %V count %ui version: %ui",
@@ -2679,8 +2682,9 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
 
             c++;
             in = 1;
+            *p = ';';
 
-            ups.last = ups.end = p - 1;
+            ups.last = ups.end = p + 1;
             block.pos = block.start = p + 1;
 
             break;
@@ -2696,12 +2700,13 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
             if (c == 0 && in) {
                 in = 0;
 
-                block.last = block.end = p - 1;
+                block.last = block.end = p;
 
                 c1++;
 
                 ngx_log_error(NGX_LOG_DEBUG, cycle->log, 0,
                               "[dyups] c1 = %ui, c2 = %ui", c1, c2);
+
                 if (c1 != c2) {
                     return NGX_ERROR;
                 }
@@ -2747,17 +2752,78 @@ ngx_dyups_do_restore_upstream(ngx_buf_t *ups, ngx_buf_t *block)
 {
 
 #if 0
-    ngx_str_t  sups, sblock;
+    u_char  *p;
 
-    sups.data = ups->pos;
-    sups.len = ups->last - ups->pos;
+    for (p = ups->pos; p < ups->last; p++) {
+       fprintf(stderr, "%c", *p);
+    }
 
-    sblock.data = block->pos;
-    sblock.len = block->last - block->pos;
+    fprintf(stderr, "\n");
 
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                   "%V %V", &sups, &sblock);
+    for (p = block->pos; p < block->last; p++) {
+       fprintf(stderr, "%c", *p);
+    }
+
+    fprintf(stderr, "\n");
+
 #endif
 
+    ngx_int_t     rc;
+    ngx_str_t    *v, name, rv;
+    ngx_pool_t   *pool;
+    ngx_array_t  *aups, *ablock;
+
+    pool = ngx_create_pool(ngx_pagesize, ngx_cycle->log);
+    if (pool == NULL) {
+        return NGX_ERROR;
+    }
+
+    aups = ngx_dyups_parse_content(pool, ups);
+    if (aups == NULL) {
+        goto failed;
+    }
+
+    if (aups->nelts != 1) {
+        goto failed;
+    }
+
+    aups = aups->elts;
+
+    if (aups->nelts != 2) {
+        goto failed;
+    }
+
+    v = aups->elts;
+
+    if (ngx_strncmp(v[0].data, "upstream", 8) != 0) {
+        goto failed;
+    }
+
+    name = v[1];
+
+    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+                  "[dyups] restore %V", &name);
+
+    ablock = ngx_dyups_parse_content(pool, block);
+    if (ablock == NULL) {
+        goto failed;
+    }
+
+    rc = ngx_dyups_do_update(&name, ablock, &rv);
+
+    ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
+                  "[dyups] restory add: %V rv: %V rc: rc: %i",
+                  &name, &rv, rc);
+    if (rc != NGX_HTTP_OK) {
+        goto failed;
+    }
+
     return NGX_OK;
+
+failed:
+    if (pool) {
+        ngx_destroy_pool(pool);
+    }
+
+    return NGX_ERROR;
 }
