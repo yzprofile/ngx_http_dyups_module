@@ -135,6 +135,10 @@ static ngx_int_t ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv);
 static ngx_int_t ngx_dyups_restore_upstreams(ngx_cycle_t *cycle,
     ngx_str_t *path);
 static ngx_array_t *ngx_dyups_copy_args(ngx_pool_t *pool, ngx_array_t *arglist);
+static ngx_buf_t * ngx_dyups_read_upstream_conf(ngx_cycle_t *cycle,
+    ngx_str_t *path);
+static ngx_int_t ngx_dyups_do_restore_upstream(ngx_buf_t *ups,
+    ngx_buf_t *block);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -2564,8 +2568,8 @@ ngx_dyups_copy_args(ngx_pool_t *pool, ngx_array_t *arglist)
 }
 
 
-static ngx_int_t
-ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
+static ngx_buf_t *
+ngx_dyups_read_upstream_conf(ngx_cycle_t *cycle, ngx_str_t *path)
 {
     off_t             file_size;
     ssize_t           n, size;
@@ -2574,14 +2578,10 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
     ngx_file_t        file;
     ngx_file_info_t   fi;
 
-    if (path->len == 0) {
-        return NGX_OK;
-    }
-
     full = *path;
 
     if (ngx_conf_full_name(cycle, &full, 0) != NGX_OK) {
-        return NGX_ERROR;
+        return NULL;
     }
 
     ngx_memzero(&file, sizeof(ngx_file_t));
@@ -2593,21 +2593,21 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
     if (file.fd == NGX_INVALID_FILE) {
         ngx_log_error(NGX_LOG_CRIT, cycle->log, ngx_errno,
                       ngx_open_file_n " \"%V\" failed", &full);
-        return NGX_ERROR;
+        return NULL;
     }
 
     if (ngx_fd_info(file.fd, &fi) == NGX_FILE_ERROR) {
         ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                       ngx_fd_info_n " \"%V\" failed", path);
-        return NGX_ERROR;
+        return NULL;
     }
 
     file_size = ngx_file_size(&fi);
 
-    buf = ngx_create_temp_buf(cycle->pool, file_size);
+    buf = ngx_create_temp_buf(cycle->pool, file_size + 1);
 
     if (buf == NULL) {
-        return NGX_ERROR;
+        return NULL;
     }
 
     for ( ;; ) {
@@ -2624,7 +2624,7 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
         n = ngx_read_file(&file, buf->last, size, file.offset);
 
         if (n == NGX_ERROR) {
-            return NGX_ERROR;
+            return NULL;
         }
 
         if (n != size) {
@@ -2632,17 +2632,131 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
                           ngx_read_file_n " returned "
                           "only %z bytes instead of %z",
                           n, size);
-            return NGX_ERROR;
+            return NULL;
         }
 
         buf->last += size;
     }
 
-#if (NGX_DEBUG)
-    u_char  *p;
-    for (p = buf->pos; p < buf->last; p++) {
-        fprintf(stderr, "%c", *p);
+    return buf;
+}
+
+
+static ngx_int_t
+ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
+{
+    u_char     *p;
+    ngx_int_t   rc;
+    ngx_buf_t  *buf, ups, block;
+    ngx_uint_t  c, in, c1, c2;
+
+    if (path->len == 0) {
+        return NGX_OK;
     }
+
+    buf = ngx_dyups_read_upstream_conf(cycle, path);
+
+    if (buf == NULL) {
+        return NGX_ERROR;
+    }
+
+#if 0
+    for (p = buf->pos; p < buf->last; p++) {
+       fprintf(stderr, "%c", *p);
+    }
+#endif
+
+    in = 0;
+    c = 0;
+
+    c1 = c2 = 0;
+
+    for (p = buf->pos; p < buf->last; p++) {
+
+        switch (*p) {
+
+        case '{':
+
+            c++;
+            in = 1;
+
+            ups.last = ups.end = p - 1;
+            block.pos = block.start = p + 1;
+
+            break;
+
+        case '}':
+
+            if (c == 0 || in == 0) {
+                return NGX_ERROR;
+            }
+
+            c--;
+
+            if (c == 0 && in) {
+                in = 0;
+
+                block.last = block.end = p - 1;
+
+                c1++;
+
+                ngx_log_error(NGX_LOG_DEBUG, cycle->log, 0,
+                              "[dyups] c1 = %ui, c2 = %ui", c1, c2);
+                if (c1 != c2) {
+                    return NGX_ERROR;
+                }
+
+                rc = ngx_dyups_do_restore_upstream(&ups, &block);
+                if (rc != NGX_OK) {
+                    return NGX_ERROR;
+                }
+
+            }
+
+            break;
+
+        default:
+
+            if (in) {
+
+
+            } else {
+
+                if (ngx_strncmp(p, "upstream", 8) == 0) {
+
+                    ups.pos = ups.start = p;
+
+                    p += 8;
+                    c2++;
+                }
+
+            }
+
+        }
+    }
+
+    ngx_log_error(NGX_LOG_DEBUG, cycle->log, 0,
+                  "[dyups] c1 = %ui, c2 = %ui", c1, c2);
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_dyups_do_restore_upstream(ngx_buf_t *ups, ngx_buf_t *block)
+{
+
+#if 0
+    ngx_str_t  sups, sblock;
+
+    sups.data = ups->pos;
+    sups.len = ups->last - ups->pos;
+
+    sblock.data = block->pos;
+    sblock.len = block->last - block->pos;
+
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "%V %V", &sups, &sblock);
 #endif
 
     return NGX_OK;
