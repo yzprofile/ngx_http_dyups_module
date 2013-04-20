@@ -541,6 +541,7 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
         ngx_shmtx_lock(&shpool->mutex);
 
         if (sh->status == NULL) {
+            ngx_shmtx_unlock(&shpool->mutex);
             return NGX_OK;
         }
 
