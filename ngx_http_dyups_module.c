@@ -509,18 +509,24 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
     shpool = ngx_dyups_global_ctx.shpool;
     sh = ngx_dyups_global_ctx.sh;
 
+    ngx_shmtx_lock(&shpool->mutex);
+
     if (sh->status == NULL) {
-        sh->status = ngx_slab_alloc(shpool,
+        sh->status = ngx_slab_alloc_locked(shpool,
                            sizeof(ngx_dyups_status_t) * ccf->worker_processes);
 
         if (sh->status == NULL) {
+            ngx_shmtx_unlock(&shpool->mutex);
             return NGX_ERROR;
         }
 
         ngx_memzero(sh->status, sizeof(ngx_msec_t) * ccf->worker_processes);
 
+        ngx_shmtx_unlock(&shpool->mutex);
         return NGX_OK;
     }
+
+    ngx_shmtx_unlock(&shpool->mutex);
 
     if (sh->version != 0) {
         ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
