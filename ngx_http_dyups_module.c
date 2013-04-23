@@ -2774,7 +2774,7 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
     u_char     *p;
     ngx_int_t   rc;
     ngx_buf_t  *buf, ups, block;
-    ngx_uint_t  c, in, c1, c2;
+    ngx_uint_t  c, in, c1, c2, sharp_comment;
 
     if (path->len == 0) {
         return NGX_OK;
@@ -2786,7 +2786,7 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
         return NGX_ERROR;
     }
 
-#if 0
+#if 1
     for (p = buf->pos; p < buf->last; p++) {
        fprintf(stderr, "%c", *p);
     }
@@ -2796,8 +2796,24 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
     c = 0;
 
     c1 = c2 = 0;
+    sharp_comment = 0;
 
     for (p = buf->pos; p < buf->last; p++) {
+
+        if (*p == '#') {
+            sharp_comment = 1;
+            continue;
+        }
+
+        if (*p == LF) {
+            if (sharp_comment == 1) {
+                sharp_comment = 0;
+            }
+        }
+
+        if (sharp_comment) {
+            continue;
+        }
 
         switch (*p) {
 
