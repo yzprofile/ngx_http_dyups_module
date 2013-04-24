@@ -172,7 +172,7 @@ host2
 server 127.0.0.1:8089
 ```
 
-## RELEASE V0.1.0
+## RELEASE V0.2.0
 
 1. check every commands to make sure they are all ok before update upstream. `done`
 
@@ -181,6 +181,8 @@ server 127.0.0.1:8089
 3. support `weight`,`max_fails`,`fail_timeout`,`backup` `done`
 
 4. support health check module, you should use [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) or wait for it's release. `done`
+
+5. restore upstream configuration in `init process` handler. `done`
 
 
 ## Run Tests
@@ -193,7 +195,3 @@ $ ln /path/to/dynamic_upstream_dir/t/dyups.t ./
 $ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove ./dyups.t
 ```
 
-
-## TODO V0.2.0
-
-Read upstream configuration in `init process` handler. `done`
