@@ -2632,7 +2632,7 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
         rc = ngx_dyups_do_update(&name, arglist, &rv);
 
         ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                      "[dyups] sync add: %V rv: %V rc: rc: %i",
+                      "[dyups] sync add: %V rv: %V rc: %i",
                       &name, &rv, rc);
 
         if (rc != NGX_HTTP_OK) {
