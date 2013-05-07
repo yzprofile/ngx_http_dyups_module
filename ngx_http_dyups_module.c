@@ -261,7 +261,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
         return NULL;
     }
 
-    if (ngx_array_init(&dmcf->dy_upstreams, cf->pool, 4,
+    if (ngx_array_init(&dmcf->dy_upstreams, cf->pool, 1024,
                        sizeof(ngx_http_dyups_srv_conf_t))
         != NGX_OK)
     {
@@ -616,7 +616,7 @@ ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid)
 
                 ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                               "[dyups] restore one pid conflict"
-                              " old: %P, new: %P", msg->pid[i]);
+                              " old: %P, new: %P", opid, npid);
                 msg->pid[i] = npid;
             }
         }
