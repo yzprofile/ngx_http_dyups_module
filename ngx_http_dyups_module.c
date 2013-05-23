@@ -2609,7 +2609,7 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path, ngx_str_t *content,
 
         rc = ngx_dyups_do_delete(&name, &rv);
 
-        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                        "[dyups] sync del: %V rv: %V rc: %i",
                        &name, &rv, rc);
 
