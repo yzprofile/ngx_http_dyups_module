@@ -1006,6 +1006,8 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
     rc = ngx_http_dyups_send_msg(&r->uri, NULL, NGX_DYUPS_DELETE);
     if (rc != NGX_OK) {
         ngx_str_set(&rv, "alert: delte success but not sync to other process");
+        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+                      "[dyups] %V", &rv);
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
         goto finish;
     }
@@ -2369,7 +2371,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
     ngx_pool_t          *pool;
     ngx_msec_t           now;
     ngx_queue_t         *q, *t;
-    ngx_array_t          msgs;
     ngx_core_conf_t     *ccf;
     ngx_slab_pool_t     *shpool;
     ngx_dyups_msg_t     *msg;
@@ -2410,12 +2411,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
     pool = ngx_create_pool(ngx_pagesize, ev->log);
     if (pool == NULL) {
         return;
-    }
-
-    rc = ngx_array_init(&msgs, pool, 8, sizeof(ngx_dyups_msg_t));
-
-    if (rc != NGX_OK) {
-        goto failed;
     }
 
     for (q = ngx_queue_last(&sh->msg_queue);
@@ -2478,12 +2473,6 @@ ngx_http_dyups_read_msg_locked(ngx_event_t *ev)
     ngx_destroy_pool(pool);
 
     return;
-
-failed:
-    ngx_log_error(NGX_LOG_ALERT, ev->log, 0, "[dyups] read msg error,"
-                  "may cause the config inaccuracy");
-
-    ngx_destroy_pool(pool);
 }
 
 
