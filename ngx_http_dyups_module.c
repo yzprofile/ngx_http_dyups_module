@@ -944,6 +944,10 @@ ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv)
     duscf = ngx_dyups_find_upstream(name, &dumy);
 
     if (duscf == NULL || duscf->deleted) {
+
+        ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+                      "[dyups] not find upstream %V %p", name, duscf);
+
         ngx_str_set(rv, "not found uptream");
         return NGX_HTTP_NOT_FOUND;
     }
@@ -2312,7 +2316,7 @@ ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
 
     ctx->scf->count++;
 
-    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream get handler count %i",
                    ctx->scf->count);
 
@@ -2328,7 +2332,7 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
 
     ctx->scf->count--;
 
-    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream free handler count %i",
                    ctx->scf->count);
 
