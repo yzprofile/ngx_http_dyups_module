@@ -1491,7 +1491,7 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
         }
 
         if (duscf->deleted == NGX_DYUPS_DELETING
-            && ( duscf->count == NULL || *(duscf->count) == 0))
+            && (duscf->count == NULL || *(duscf->count) == 0))
         {
             if (duscf->pool) {
 
@@ -1517,13 +1517,6 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
             || ngx_strncasecmp(uscf->host.data, name->data, uscf->host.len)
                != 0)
         {
-            continue;
-        }
-
-        if (duscf->count != NULL && *(duscf->count) != 0) {
-            ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                           "[dyups] delete upstream in find function");
-            (void) ngx_dyups_delete_upstream(duscf);
             continue;
         }
 
