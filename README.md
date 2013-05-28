@@ -53,11 +53,11 @@ file: conf/upstream.conf
     upstream host1 {
         server 127.0.0.1:8088;
     }
-        
+
     upstream host2 {
         server 127.0.0.1:8089;
     }
-    
+
 
 ## Installation
 ```bash
@@ -183,6 +183,10 @@ server 127.0.0.1:8089
 4. support health check module, you should use [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) or wait for it's release. `done`
 
 5. restore upstream configuration in `init process` handler. `done`
+
+## RELEASE V0.2.2
+
+1. Bugfixed: upstream will be deleted in the process of finding upstream.
 
 
 ## Run Tests
