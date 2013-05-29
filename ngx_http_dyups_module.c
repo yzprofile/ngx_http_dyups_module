@@ -108,7 +108,7 @@ static ngx_int_t ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf,
     ngx_array_t *arglist);
 static ngx_int_t ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf,
     ngx_str_t *name, ngx_uint_t index);
-static ngx_int_t ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf);
+static void ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf);
 static ngx_int_t ngx_http_dyups_check_commands(ngx_array_t *arglist);
 static ngx_int_t ngx_http_dyups_init_peer(ngx_http_request_t *r,
     ngx_http_upstream_srv_conf_t *us);
@@ -424,7 +424,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 
         ngx_memzero(duscf, sizeof(ngx_http_dyups_srv_conf_t));
 
-        duscf->pool = ngx_create_pool(128, cf->log);
+        duscf->pool = ngx_create_pool(512, cf->log);
         if (duscf->pool == NULL) {
             return NGX_ERROR;
         }
@@ -939,7 +939,7 @@ ngx_http_dyups_show_upstream(ngx_http_request_t *r,
 static ngx_int_t
 ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv)
 {
-    ngx_int_t                   rc, dumy;
+    ngx_int_t                   dumy;
     ngx_http_dyups_srv_conf_t  *duscf;
 
     duscf = ngx_dyups_find_upstream(name, &dumy);
@@ -953,11 +953,7 @@ ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv)
         return NGX_HTTP_NOT_FOUND;
     }
 
-    rc = ngx_dyups_delete_upstream(duscf);
-    if (rc != NGX_OK) {
-        ngx_str_set(rv, "failed");
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
+    ngx_dyups_delete_upstream(duscf);
 
     ngx_str_set(rv, "success");
 
@@ -1169,8 +1165,19 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_array_t *arglist, ngx_str_t *rv)
 
     duscf = ngx_dyups_find_upstream(name, &idx);
     if (duscf) {
-        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                       "[dyups] upstream reuse");
+        ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+                      "[dyups] upstream reuse, idx: [%i]", idx);
+
+        if (!duscf->deleted) {
+            ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+                          "[dyups] upstream delete first");
+            ngx_dyups_delete_upstream(duscf);
+
+            duscf = ngx_dyups_find_upstream(name, &idx);
+
+            ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+                          "[dyups] find another, idx: [%i]", idx);
+        }
     }
 
     if (idx == -1) {
@@ -1497,7 +1504,8 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
             if (duscf->pool) {
 
                 ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                               "[dyups] free dynamic upstream");
+                              "[dyups] free dynamic upstream in find upstream"
+                              " %ui", duscf->idx);
 
                 ngx_destroy_pool(duscf->pool);
                 duscf->pool = NULL;
@@ -1547,29 +1555,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
                                                ngx_http_upstream_module);
     uscfp = umcf->upstreams.elts;
 
-    if (duscf->pool) {
-#if (NGX_HTTP_UPSTREAM_CHECK)
-        ngx_uint_t                   i;
-        ngx_http_upstream_server_t  *us;
-
-        if (!duscf->deleted) {
-
-            ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                          "[dyups] delete in init upstream");
-
-            uscf = duscf->upstream;
-            us = uscf->servers->elts;
-
-            for (i = 0; i < uscf->servers->nelts; i++) {
-                ngx_http_upstream_check_delete_dynamic_peer(&uscf->host,
-                                                            us[i].addrs);
-            }
-        }
-#endif
-        ngx_destroy_pool(duscf->pool);
-    }
-
-    duscf->pool = ngx_create_pool(128, ngx_cycle->log);
+    duscf->pool = ngx_create_pool(512, ngx_cycle->log);
     if (duscf->pool == NULL) {
         return NGX_ERROR;
     }
@@ -1652,7 +1638,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 }
 
 
-static ngx_int_t
+static void
 ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 {
     ngx_uint_t                      i;
@@ -1678,8 +1664,6 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     uscfp[duscf->idx] = &ngx_http_dyups_deleted_upstream;
 
     duscf->deleted = NGX_DYUPS_DELETING;
-
-    return NGX_OK;
 }
 
 
@@ -1734,7 +1718,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
     ngx_array_t    *line;
     ngx_command_t  *cmd;
 
-    pool = ngx_create_pool(128, ngx_cycle->log);
+    pool = ngx_create_pool(512, ngx_cycle->log);
     if (pool == NULL) {
         return NGX_ERROR;
     }
