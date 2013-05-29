@@ -2941,7 +2941,7 @@ ngx_dyups_do_restore_upstream(ngx_buf_t *ups, ngx_buf_t *block)
     rc = ngx_dyups_do_update(&name, ablock, &rv);
 
     ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                  "[dyups] restory add: %V rv: %V rc: rc: %i",
+                  "[dyups] restore add: %V rv: %V rc: rc: %i",
                   &name, &rv, rc);
     if (rc != NGX_HTTP_OK) {
         goto failed;
