@@ -554,10 +554,11 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
         for (i = 1; i < ccf->worker_processes; i++) {
 
             ngx_log_error(NGX_LOG_WARN, cycle->log, 0,
-                          "[dyups] %ui %ui", status->time, status[i].time);
+                          "[dyups] process %P %ui %ui",
+                          sh->status[i].pid, status->time, sh->status[i].time);
 
             if (status->time > sh->status[i].time) {
-                status = &status[i];
+                status = &sh->status[i];
             }
         }
 
