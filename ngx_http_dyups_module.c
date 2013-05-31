@@ -289,6 +289,10 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
     dmcf->enable = dmcf->enable == NGX_CONF_UNSET ? 0 : 1;
     dmcf->trylock = dmcf->trylock == NGX_CONF_UNSET ? 0 : 1;
 
+    if (!dmcf->enable) {
+        return NGX_CONF_OK;
+    }
+
     if (dmcf->read_msg_timeout) {
         dmcf->read_msg_timeout = 1000;
     }
