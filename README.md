@@ -105,6 +105,15 @@ Context: `main`
 This directive set the path of file which you dumped all of upstreams' configs, it will be loaded in `init process` after process respwan to restore upstreams.
 
 
+Syntax: **dyups_trylock** `on | off`
+
+Default: `off`
+
+Context: `main`
+
+You will get a better prefomance but it maybe not stable, and you will get a '409' when the update request conflicts with others.
+
+
 ## restful interface
 
 ### GET
