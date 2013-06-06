@@ -129,15 +129,15 @@ You will get a better prefomance but it maybe not stable, and you will get a '40
 ### DELETE
 - `/upstream/name`  delete one upstream
 
-Call the interface, when you get the return code is `500`, you need to reload nginx to make the Nginx work at a good state.
+Call the interface, when you get the return code is `HTTP_INTERNAL_SERVER_ERROR 500`, you need to reload nginx to make the Nginx work at a good state.
 
-If you got 409, you need resend the same commands again latter.
+If you got `HTTP_CONFLICT 409`, you need resend the same commands again latter.
 
-The /list and /detail interface will return 204 when there is no upstream.
+The /list and /detail interface will return `HTTP_NO_CONTENT 204` when there is no upstream.
 
 Other code means you should modify your commands and call the interface again.
 
-Of course, You also need a 3-part to generate the new config and dump it to Nginx'conf directory.
+`ATTENEION`: You also need a `third-party` to generate the new config and dump it to Nginx'conf directory.
 
 ## Sample
 ```bash
