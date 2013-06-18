@@ -2333,8 +2333,8 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
     dmcf = ev->data;
     shpool = ngx_dyups_global_ctx.shpool;
 
-    ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[dyups] has %ui upstreams",
-                  dmcf->dy_upstreams.nelts);
+    ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[dyups] has %ui upstreams,"
+                  "(include deleted)", dmcf->dy_upstreams.nelts);
 
     ngx_shmtx_lock(&shpool->mutex);
 
