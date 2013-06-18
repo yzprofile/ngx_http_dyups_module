@@ -145,6 +145,7 @@ static ngx_buf_t * ngx_dyups_read_upstream_conf(ngx_cycle_t *cycle,
 static ngx_int_t ngx_dyups_do_restore_upstream(ngx_buf_t *ups,
     ngx_buf_t *block);
 static void ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid);
+static void ngx_http_dyups_clean_request(void *data);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -2264,6 +2265,7 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
     ngx_http_upstream_srv_conf_t *us)
 {
     ngx_int_t                            rc;
+    ngx_pool_cleanup_t                  *cln;
     ngx_http_dyups_ctx_t                *ctx;
     ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
@@ -2289,7 +2291,28 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
     r->upstream->peer.get = ngx_http_dyups_get_peer;
     r->upstream->peer.free = ngx_http_dyups_free_peer;
 
+    cln = ngx_pool_cleanup_add(r->pool, 0);
+    if (cln == NULL) {
+        return NGX_ERROR;
+    }
+
+    cln->handler = ngx_http_dyups_clean_request;
+    cln->data = ctx;
+
     return NGX_OK;
+}
+
+
+static void
+ngx_http_dyups_clean_request(void *data)
+{
+    ngx_http_dyups_ctx_t  *ctx = data;
+
+    ctx->scf->count--;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] http clean request count %i",
+                   ctx->scf->count);
 }
 
 
@@ -2314,8 +2337,6 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
 {
     ngx_http_dyups_ctx_t  *ctx = data;
 
-    ctx->scf->count--;
-
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream free handler count %i",
                    ctx->scf->count);
@@ -2333,7 +2354,7 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
     dmcf = ev->data;
     shpool = ngx_dyups_global_ctx.shpool;
 
-    ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[dyups] has %ui upstreams,"
+    ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[dyups] has %ui upstreams"
                   "(include deleted)", dmcf->dy_upstreams.nelts);
 
     ngx_shmtx_lock(&shpool->mutex);
