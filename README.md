@@ -181,7 +181,17 @@ host2
 server 127.0.0.1:8089
 ```
 
-## RELEASE V0.2.0
+## Change Log
+
+### RELEASE V0.2.4
+
+1. Bugfixed: client timed out cause a coredumped while adding an exist upstream
+
+### RELEASE V0.2.2
+
+1. Bugfixed: upstream will be deleted in the process of finding upstream.
+
+### RELEASE V0.2.0
 
 1. check every commands to make sure they are all ok before update upstream. `done`
 
@@ -192,10 +202,6 @@ server 127.0.0.1:8089
 4. support health check module, you should use [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) or wait for it's release. `done`
 
 5. restore upstream configuration in `init process` handler. `done`
-
-## RELEASE V0.2.2
-
-1. Bugfixed: upstream will be deleted in the process of finding upstream.
 
 
 ## Run Tests
