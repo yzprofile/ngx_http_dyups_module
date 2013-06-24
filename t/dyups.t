@@ -251,7 +251,7 @@ server 127.0.0.1:8089
 dyhost
 server 127.0.0.1:8088
 /m;
-like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-02-26 17:46:03');
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2013-06-20 17:46:03');
 
 like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088 weight=3; server 127.0.0.1:8089 weight=1;', 8081), qr/success/m, '2013-02-28 16:27:45');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088|8089/m, '2013-02-28 16:27:49');
