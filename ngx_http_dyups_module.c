@@ -1001,9 +1001,6 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
 
     name = value[1];
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "[dyups] delete upstream name: %V", &name);
-
     status = ngx_dyups_do_delete(&name, &rv);
     if (status != NGX_HTTP_OK) {
         goto finish;
@@ -1666,7 +1663,7 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     uscf = duscf->upstream;
     uscfp = umcf->upstreams.elts;
 
-    ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
+    ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                   "[dyups] delete upstream \"%V\"", &duscf->upstream->host);
 
     us = uscf->servers->elts;
