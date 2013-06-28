@@ -404,7 +404,6 @@ ngx_http_dyups_create_srv_conf(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_dyups_init(ngx_conf_t *cf)
 {
-    ngx_url_t                            u;
     ngx_uint_t                           i;
     ngx_http_dyups_srv_conf_t           *duscf;
     ngx_http_upstream_server_t          *us;
@@ -458,30 +457,6 @@ ngx_http_dyups_init(ngx_conf_t *cf)
     if (us == NULL) {
         return NGX_ERROR;
     }
-
-    ngx_memzero(&u, sizeof(ngx_url_t));
-    ngx_memzero(us, sizeof(ngx_http_upstream_server_t));
-
-    u.default_port = 80;
-    ngx_str_set(&u.url, "0.0.0.0");
-
-    if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
-        if (u.err) {
-            ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
-                          "[dyups] %s in init", u.err);
-        }
-
-        return NGX_ERROR;
-    }
-
-    us->addrs = u.addrs;
-    us->naddrs = u.naddrs;
-    us->down = 1;
-
-    ngx_str_set(&ngx_http_dyups_deleted_upstream.host,
-                "_dyups_upstream_down_host_");
-
-    ngx_http_dyups_deleted_upstream.file_name = (u_char *) "dyups_upstream";
 
     return NGX_OK;
 }
@@ -1675,9 +1650,7 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 #endif
     }
 
-    /* *uscf = ngx_http_dyups_deleted_upstream; */
-    uscfp[duscf->idx] = &ngx_http_dyups_deleted_upstream;
-    duscf->upstream = &ngx_http_dyups_deleted_upstream;
+    ngx_str_set(&duscf->upstream->host, "_dyups_upstream_down_host_");
     duscf->deleted = NGX_DYUPS_DELETING;
 }
 
