@@ -1711,6 +1711,7 @@ ngx_http_dyups_check_commands(ngx_array_t *arglist)
         if (value[0].len == 6 &&
             ngx_strncasecmp(value[0].data, (u_char *) "server", 6) == 0)
         {
+            ngx_memzero(&u, sizeof(ngx_url_t));
             found = 1;
 
             u.url = value[1];
