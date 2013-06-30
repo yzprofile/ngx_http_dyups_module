@@ -580,15 +580,10 @@ ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid)
 {
     ngx_int_t            i;
     ngx_queue_t         *q;
-    ngx_core_conf_t     *ccf;
-    ngx_slab_pool_t     *shpool;
     ngx_dyups_msg_t     *msg;
     ngx_dyups_shctx_t   *sh;
 
-    ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
-                                           ngx_core_module);
     sh = ngx_dyups_global_ctx.sh;
-    shpool = ngx_dyups_global_ctx.shpool;
 
     for (q = ngx_queue_last(&sh->msg_queue);
          q != ngx_queue_sentinel(&sh->msg_queue);
@@ -1630,13 +1625,9 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
 {
     ngx_uint_t                      i;
     ngx_http_upstream_server_t     *us;
-    ngx_http_upstream_srv_conf_t   *uscf, **uscfp;
-    ngx_http_upstream_main_conf_t  *umcf;
+    ngx_http_upstream_srv_conf_t   *uscf;
 
-    umcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
-                                               ngx_http_upstream_module);
     uscf = duscf->upstream;
-    uscfp = umcf->upstreams.elts;
 
     ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                   "[dyups] delete upstream \"%V\"", &duscf->upstream->host);
