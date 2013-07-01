@@ -294,7 +294,7 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
         return NGX_CONF_OK;
     }
 
-    if (dmcf->read_msg_timeout) {
+    if (dmcf->read_msg_timeout == NGX_CONF_UNSET_MSEC) {
         dmcf->read_msg_timeout = 1000;
     }
 
