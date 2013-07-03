@@ -262,12 +262,25 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
         return NULL;
     }
 
+#if (NGX_DEBUG)
+
+    if (ngx_array_init(&dmcf->dy_upstreams, cf->pool, 1,
+                       sizeof(ngx_http_dyups_srv_conf_t))
+        != NGX_OK)
+    {
+        return NULL;
+    }
+
+#else
+    
     if (ngx_array_init(&dmcf->dy_upstreams, cf->pool, 1024,
                        sizeof(ngx_http_dyups_srv_conf_t))
         != NGX_OK)
     {
         return NULL;
     }
+
+#endif
 
     dmcf->enable = NGX_CONF_UNSET;
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
@@ -1874,7 +1887,16 @@ ngx_dyups_parse_content(ngx_pool_t *pool, ngx_buf_t *buf)
     ngx_buf_t     body;
     ngx_array_t  *args_list, *args;
 
+#if (NGX_DEBUG)
+
     args_list = ngx_array_create(pool, 1, sizeof(ngx_array_t));
+
+#else
+
+    args_list = ngx_array_create(pool, 16, sizeof(ngx_array_t));
+
+#endif
+
     if (args_list == NULL) {
         return NULL;
     }
@@ -1888,7 +1910,13 @@ ngx_dyups_parse_content(ngx_pool_t *pool, ngx_buf_t *buf)
             return NULL;
         }
 
+#if (NGX_DEBUG)
         rc = ngx_array_init(args, pool, 1, sizeof(ngx_str_t));
+
+#else
+        rc = ngx_array_init(args, pool, 16, sizeof(ngx_str_t));
+
+#endif
         if (rc != NGX_OK) {
             return NULL;
         }
@@ -2352,14 +2380,39 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
 static void
 ngx_http_dyups_read_msg(ngx_event_t *ev)
 {
+    ngx_uint_t                   i, count, s_count, d_count;
     ngx_slab_pool_t             *shpool;
+    ngx_http_dyups_srv_conf_t   *duscfs, *duscf;
     ngx_http_dyups_main_conf_t  *dmcf;
 
     dmcf = ev->data;
     shpool = ngx_dyups_global_ctx.shpool;
 
-    ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[dyups] has %ui upstreams"
-                  "(include deleted)", dmcf->dy_upstreams.nelts);
+    count = 0;
+    s_count = 0;
+    d_count = 0;
+
+    duscfs = dmcf->dy_upstreams.elts;
+    for (i = 0; i < dmcf->dy_upstreams.nelts; i++) {
+
+        duscf = &duscfs[i];
+
+        if (!duscf->dynamic) {
+            s_count++;
+            continue;
+        }
+
+        if (duscf->deleted) {
+            d_count++;
+            continue;
+        }
+
+        count++;
+    }
+
+    ngx_log_error(NGX_LOG_INFO, ev->log, 0,
+                  "[dyups] has %ui upstreams, %ui static, %ui deleted, all %ui",
+                  count, s_count, d_count, dmcf->dy_upstreams.nelts);
 
     ngx_shmtx_lock(&shpool->mutex);
 
