@@ -272,7 +272,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     }
 
 #else
-    
+
     if (ngx_array_init(&dmcf->dy_upstreams, cf->pool, 1024,
                        sizeof(ngx_http_dyups_srv_conf_t))
         != NGX_OK)
