@@ -450,12 +450,16 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 
         duscf->upstream = uscfp[i];
         duscf->dynamic = (uscfp[i]->port == 0
+                          && uscfp[i]->srv_conf && uscfp[i]->servers
                           && uscfp[i]->flags & NGX_HTTP_UPSTREAM_CREATE);
         duscf->deleted = 0;
         duscf->idx = i;
 
-        dscf = duscf->upstream->srv_conf[ngx_http_dyups_module.ctx_index];
         duscf->count = &dscf->count;
+
+        if (duscf->dynamic) {
+            dscf = duscf->upstream->srv_conf[ngx_http_dyups_module.ctx_index];
+        }
     }
 
     /* alloc a dumy upstream */
