@@ -455,10 +455,9 @@ ngx_http_dyups_init(ngx_conf_t *cf)
         duscf->deleted = 0;
         duscf->idx = i;
 
-        duscf->count = &dscf->count;
-
         if (duscf->dynamic) {
             dscf = duscf->upstream->srv_conf[ngx_http_dyups_module.ctx_index];
+            duscf->count = &dscf->count;
         }
     }
 
