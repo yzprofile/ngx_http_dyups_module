@@ -186,6 +186,7 @@ server 127.0.0.1:8089
 ### RELEASE V0.2.4
 
 1. Bugfixed: client timed out cause a coredumped while adding an exist upstream
+2. Bugfixed: when proxy_pass to a no-variable address dyups will coredump
 
 ### RELEASE V0.2.2
 
