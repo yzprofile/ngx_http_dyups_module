@@ -1,6 +1,10 @@
 ## Description
 This module can be used to update your upstream-list without reloadding Nginx.
 
+TODO:
+
+1. Support adding server by hostname.
+
 ### Config Example
 
 file: conf/nginx.conf
