@@ -34,6 +34,8 @@ typedef struct {
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
     ngx_msec_t                     read_msg_timeout;
+    ngx_resolver_t                *resolver;
+    ngx_msec_t                     resolver_timeout;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -146,6 +148,8 @@ static ngx_int_t ngx_dyups_do_restore_upstream(ngx_buf_t *ups,
     ngx_buf_t *block);
 static void ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid);
 static void ngx_http_dyups_clean_request(void *data);
+static char *ngx_http_dyups_resolver(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -155,6 +159,20 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       ngx_http_dyups_interface,
       0,
       0,
+      NULL },
+
+    { ngx_string("dyups_resolver"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
+      ngx_http_dyups_resolver,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      0,
+      NULL },
+
+    { ngx_string("dyups_resolver_timeout"),
+      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_dyups_main_conf_t, resolver_timeout),
       NULL },
 
     { ngx_string("dyups_read_msg_timeout"),
@@ -289,9 +307,32 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
 
     /*
       dmcf->conf_path = nil
+      dmcf->resolver = nil
      */
 
     return dmcf;
+}
+
+
+static char *
+ngx_http_dyups_resolver(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_dyups_main_conf_t  *dmcf = conf;
+
+    ngx_str_t  *value;
+
+    if (dmcf->resolver) {
+        return "is duplicate";
+    }
+
+    value = cf->args->elts;
+
+    dmcf->resolver = ngx_resolver_create(cf, &value[1], cf->args->nelts - 1);
+    if (dmcf->resolver == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    return NGX_CONF_OK;
 }
 
 
@@ -1339,7 +1380,6 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_array_t *arglist)
             u.url = value[1];
             u.default_port = 80;
 
-            /* TODO: parse ip*/
             if (ngx_parse_url(duscf->pool, &u) != NGX_OK) {
                 if (u.err) {
                     ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
