@@ -3,7 +3,7 @@ This module can be used to update your upstream-list without reloadding Nginx.
 
 TODO:
 
-1. Support adding server by hostname.
+1. Support adding server by hostname without blocking process.
 2. It can not work with common `nginx_upstream_check_module`, if you want, you should use [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) witch contains a patched upstream check module.
 
 ### Config Example
