@@ -304,6 +304,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
     dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
     dmcf->trylock = NGX_CONF_UNSET;
+    dmcf->resolver_timeout = NGX_CONF_UNSET_MSEC;
 
     /*
       dmcf->conf_path = nil
@@ -353,6 +354,10 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
         if (dmcf->resolver == NULL) {
             return NGX_CONF_ERROR;
         }
+    }
+
+    if (dmcf->resolver_timeout == NGX_CONF_UNSET_MSEC) {
+        dmcf->read_msg_timeout = 30000;
     }
 
     if (dmcf->read_msg_timeout == NGX_CONF_UNSET_MSEC) {
