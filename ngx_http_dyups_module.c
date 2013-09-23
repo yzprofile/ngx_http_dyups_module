@@ -574,7 +574,7 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
     dmcf = ngx_http_cycle_get_module_main_conf(ngx_cycle,
                                                ngx_http_dyups_module);
 
-    if (!dmcf || !dmcf->enable) {
+    if (!dmcf || !dmcf->enable || ngx_process == NGX_PROCESS_HELPER) {
         return NGX_OK;
     }
 
