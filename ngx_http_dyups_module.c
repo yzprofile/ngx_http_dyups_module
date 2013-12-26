@@ -1709,6 +1709,12 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     duscf->ctx = ctx;
     duscf->deleted = 0;
 
+#if (NGX_HTTP_UPSTREAM_RBTREE)
+    uscf->node.key = ngx_crc32_short(uscf->host.data, uscf->host.len);
+
+    ngx_rbtree_insert(&umcf->rbtree, &uscf->node);
+#endif
+
     return NGX_OK;
 }
 
@@ -1739,6 +1745,10 @@ ngx_dyups_delete_upstream(ngx_http_dyups_srv_conf_t *duscf)
     }
 
     uscfp[duscf->idx] = &ngx_http_dyups_deleted_upstream;
+
+#if (NGX_HTTP_UPSTREAM_RBTREE)
+    ngx_rbtree_delete(&umcf->rbtree, &uscf->node);
+#endif
 
     duscf->deleted = NGX_DYUPS_DELETING;
 }
