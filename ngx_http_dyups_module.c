@@ -844,6 +844,8 @@ finish:
 
     if (status != NGX_HTTP_OK) {
         r->headers_out.content_length_n = 0;
+    } else {
+        r->headers_out.content_length_n = ngx_buf_size(buf);
     }
 
     rc = ngx_http_send_header(r);
@@ -1055,8 +1057,8 @@ ngx_http_dyups_do_delete(ngx_http_request_t *r, ngx_array_t *resource)
 
     value = resource->elts;
 
-    if (value[0].len == 8
-        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) != 0)
+    if (value[0].len != 8
+        || ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) != 0)
     {
         ngx_str_set(&rv, "not support this api");
         status = NGX_HTTP_NOT_ALLOWED;
@@ -1317,8 +1319,8 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
 
     value = resource->elts;
 
-    if (value[0].len == 8
-        && ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) != 0)
+    if (value[0].len != 8
+        || ngx_strncasecmp(value[0].data, (u_char *) "upstream", 8) != 0)
     {
         ngx_str_set(rv, "not support this api");
         return NGX_HTTP_NOT_FOUND;
