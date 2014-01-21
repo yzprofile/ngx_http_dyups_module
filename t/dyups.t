@@ -113,25 +113,25 @@ http {
             proxy_pass http://$host;
         }
     }
-    
+
     server {
         listen 8088;
         location / {
-            echo 8088;
+            return 200 "8088";
         }
     }
 
     server {
         listen unix:/tmp/dyupssocket;
         location / {
-            echo unix;
+            return 200 "unix";
         }
     }
 
     server {
         listen 8089;
         location / {
-            echo 8089;    
+            return 200 "8089";
         }
     }
 
@@ -325,21 +325,21 @@ http {
     server {
         listen 8088;
         location / {
-            echo 8088;
+            return 200 "8088";
         }
     }
 
     server {
         listen unix:/tmp/dyupssocket;
         location / {
-            echo unix;
+            return 200 "unix";
         }
     }
 
     server {
         listen 8089;
         location / {
-            echo 8089;    
+            return 200 "8089";
         }
     }
 
