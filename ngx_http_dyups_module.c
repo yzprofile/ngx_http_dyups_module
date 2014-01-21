@@ -844,6 +844,8 @@ finish:
 
     if (status != NGX_HTTP_OK) {
         r->headers_out.content_length_n = 0;
+    } else {
+        r->headers_out.content_length_n = ngx_buf_size(buf);
     }
 
     rc = ngx_http_send_header(r);
