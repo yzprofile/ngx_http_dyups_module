@@ -3,8 +3,7 @@ This module can be used to update your upstream-list without reloadding Nginx.
 
 TODO:
 
-1. Support adding server by hostname without blocking process.
-2. It can not work with common `nginx_upstream_check_module`, if you still want to use this module, you can try [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) witch contains a patched upstream check module.
+It can not work with common `nginx_upstream_check_module`, if you still want to use this module, you can try [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) witch contains a patched upstream check module.
 
 ### Config Example
 
@@ -187,6 +186,12 @@ server 127.0.0.1:8089
 ```
 
 ## Change Log
+
+### RELEASE V0.2.5
+1. Bugfixed: wrong string comparison for string "upstream", @chobits
+2. Bugfixed: that response of /detail uri has no Content-Length header, @chobits
+3. Feature: if you use this [branch of tengine](https://github.com/alibaba/tengine/tree/jst), update upstream rbtree, @SarahWang
+4. Feature: simplify upstream parsing methods via ngx_conf_parse api, @chobits
 
 ### RELEASE V0.2.4
 
