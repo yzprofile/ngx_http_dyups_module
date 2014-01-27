@@ -34,8 +34,6 @@ typedef struct {
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
     ngx_msec_t                     read_msg_timeout;
-    ngx_resolver_t                *resolver;
-    ngx_msec_t                     resolver_timeout;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -143,8 +141,6 @@ static ngx_int_t ngx_dyups_do_restore_upstream(ngx_buf_t *ups,
     ngx_buf_t *block);
 static void ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid);
 static void ngx_http_dyups_clean_request(void *data);
-static char *ngx_http_dyups_resolver(ngx_conf_t *cf, ngx_command_t *cmd,
-    void *conf);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -154,20 +150,6 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       ngx_http_dyups_interface,
       0,
       0,
-      NULL },
-
-    { ngx_string("dyups_resolver"),
-      NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
-      ngx_http_dyups_resolver,
-      NGX_HTTP_MAIN_CONF_OFFSET,
-      0,
-      NULL },
-
-    { ngx_string("dyups_resolver_timeout"),
-      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_dyups_main_conf_t, resolver_timeout),
       NULL },
 
     { ngx_string("dyups_read_msg_timeout"),
@@ -287,36 +269,12 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
     dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
     dmcf->trylock = NGX_CONF_UNSET;
-    dmcf->resolver_timeout = NGX_CONF_UNSET_MSEC;
 
     /*
       dmcf->conf_path = nil
-      dmcf->resolver = nil
      */
 
     return dmcf;
-}
-
-
-static char *
-ngx_http_dyups_resolver(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-    ngx_http_dyups_main_conf_t  *dmcf = conf;
-
-    ngx_str_t  *value;
-
-    if (dmcf->resolver) {
-        return "is duplicate";
-    }
-
-    value = cf->args->elts;
-
-    dmcf->resolver = ngx_resolver_create(cf, &value[1], cf->args->nelts - 1);
-    if (dmcf->resolver == NULL) {
-        return NGX_CONF_ERROR;
-    }
-
-    return NGX_CONF_OK;
 }
 
 
@@ -330,17 +288,6 @@ ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf)
 
     if (!dmcf->enable) {
         return NGX_CONF_OK;
-    }
-
-    if (dmcf->resolver == NULL) {
-        dmcf->resolver = ngx_resolver_create(cf, NULL, 0);
-        if (dmcf->resolver == NULL) {
-            return NGX_CONF_ERROR;
-        }
-    }
-
-    if (dmcf->resolver_timeout == NGX_CONF_UNSET_MSEC) {
-        dmcf->read_msg_timeout = 30000;
     }
 
     if (dmcf->read_msg_timeout == NGX_CONF_UNSET_MSEC) {
