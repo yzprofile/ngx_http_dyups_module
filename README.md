@@ -1,6 +1,8 @@
 ## Description
 This module can be used to update your upstream-list without reloadding Nginx.
 
+And this module compatible with [lua-upstream-nginx-module](https://github.com/agentzh/lua-upstream-nginx-module), You can use this module to get more detail infomation of upstream.
+
 TODO:
 
 It can not work with common `nginx_upstream_check_module`, if you still want to use this module, you can try [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) witch contains a patched upstream check module.
