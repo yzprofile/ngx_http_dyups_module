@@ -7,6 +7,8 @@ TODO:
 
 It can not work with common `nginx_upstream_check_module`, if you still want to use this module, you can try [this branch of Tengine](https://github.com/yaoweibin/tengine/tree/dynamic_upstream_check) witch contains a patched upstream check module.
 
+Or Use the `upstream_check-tengine-2.0.patch` to patch tengine2.0
+
 ### Config Example
 
 file: conf/nginx.conf
