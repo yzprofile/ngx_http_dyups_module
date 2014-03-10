@@ -133,6 +133,9 @@ static ngx_int_t ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *path,
     ngx_str_t *content, ngx_uint_t flag);
 static ngx_array_t *ngx_dyups_parse_path(ngx_pool_t *pool, ngx_str_t *path);
 static ngx_int_t ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv);
+static ngx_int_t ngx_dyups_do_update(ngx_str_t *name, ngx_buf_t *buf,
+    ngx_str_t *rv);
+static ngx_int_t ngx_dyups_sandbox_update(ngx_buf_t *buf, ngx_str_t *rv);
 static ngx_int_t ngx_dyups_restore_upstreams(ngx_cycle_t *cycle,
     ngx_str_t *path);
 static ngx_buf_t *ngx_dyups_read_upstream_conf(ngx_cycle_t *cycle,
@@ -1200,20 +1203,36 @@ ngx_dyups_do_update(ngx_str_t *name, ngx_buf_t *buf, ngx_str_t *rv)
     rc = ngx_dyups_init_upstream(duscf, name, idx);
 
     if (rc != NGX_OK) {
-        ngx_str_set(rv, "failed");
+        ngx_str_set(rv, "init upstream failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     /* init upstream */
     rc = ngx_dyups_add_server(duscf, buf);
     if (rc != NGX_OK) {
-        ngx_str_set(rv, "failed");
+        ngx_str_set(rv, "add server failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     ngx_str_set(rv, "success");
 
     return NGX_HTTP_OK;
+}
+
+
+static ngx_int_t
+ngx_dyups_sandbox_update(ngx_buf_t *buf, ngx_str_t *rv)
+{
+    ngx_int_t  rc;
+    ngx_str_t  dumy;
+
+    ngx_str_t  sandbox = ngx_string("_dyups_upstream_sandbox_");
+
+    rc = ngx_dyups_do_update(&sandbox, buf, rv);
+
+    (void) ngx_dyups_do_delete(&sandbox, &dumy);
+
+    return rc;
 }
 
 
@@ -1225,8 +1244,8 @@ static ngx_int_t
 ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     ngx_buf_t *body, ngx_str_t *rv)
 {
-    ngx_int_t                       rc;
-    ngx_str_t                      *value, name;
+    ngx_int_t   rc;
+    ngx_str_t  *value, name;
 
     if (resource->nelts != 2) {
         ngx_str_set(rv, "not support this interface");
@@ -1247,19 +1266,12 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
     ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                    "[dyups] post upstream name: %V", &name);
 
-    rc = ngx_dyups_do_update(&name, body, rv);
+    rc = ngx_dyups_sandbox_update(body, rv);
     if (rc != NGX_HTTP_OK) {
-
-        rc = ngx_dyups_do_delete(&name, rv);
-        if (rc != NGX_HTTP_OK) {
-            return rc;
-        }
-
-        ngx_str_set(rv, "commands error");
         return NGX_HTTP_NOT_ALLOWED;
     }
 
-    return NGX_HTTP_OK;
+    return ngx_dyups_do_update(&name, body, rv);
 }
 
 
