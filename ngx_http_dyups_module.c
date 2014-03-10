@@ -1249,6 +1249,12 @@ ngx_http_dyups_do_post(ngx_http_request_t *r, ngx_array_t *resource,
 
     rc = ngx_dyups_do_update(&name, body, rv);
     if (rc != NGX_HTTP_OK) {
+
+        rc = ngx_dyups_do_delete(&name, rv);
+        if (rc != NGX_HTTP_OK) {
+            return rc;
+        }
+
         ngx_str_set(rv, "commands error");
         return NGX_HTTP_NOT_ALLOWED;
     }
