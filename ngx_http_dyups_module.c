@@ -2293,6 +2293,9 @@ ngx_dyups_restore_upstreams(ngx_cycle_t *cycle, ngx_str_t *path)
         return NGX_ERROR;
     }
 
+    ngx_memzero(&ups, sizeof(ngx_buf_t));
+    ngx_memzero(&block, sizeof(ngx_buf_t));
+
 #if 1
     for (p = buf->pos; p < buf->last; p++) {
        fprintf(stderr, "%c", *p);
