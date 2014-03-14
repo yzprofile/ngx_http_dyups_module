@@ -191,6 +191,10 @@ server 127.0.0.1:8089
 
 ## Change Log
 
+### RELEASE V0.2.6
+Bugfixed: Supported sandbox before updatting
+
+
 ### RELEASE V0.2.5
 1. Bugfixed: wrong string comparison for string "upstream", @chobits
 2. Bugfixed: that response of /detail uri has no Content-Length header, @chobits
