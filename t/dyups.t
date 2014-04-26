@@ -268,8 +268,8 @@ like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-04 15:53:44');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-04 15:53:46');
 like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '2013-03-04 15:53:49');
 
-like(mhttp_post('/upstream/dyhost', 'ip_hash aaa;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:36:40');
-like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:37:25');
+like(mhttp_post('/upstream/dyhost', 'ip_hash aaa;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/add server failed/m, '2013-03-05 15:36:40');
+like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/add server failed/m, '2013-03-05 15:37:25');
 
 like(mhttp_post('/upstream/dyhost', 'server unix:/tmp/dyupssocket;', 8081), qr/success/m, '2013-03-05 16:13:11');
 like(mhttp_get('/', 'dyhost', 8080), qr/unix/m, '2013-03-05 16:13:23');
@@ -448,8 +448,8 @@ like(mhttp_post('/upstream/dyhost', 'server 127.0.0.1:8088; server 127.0.0.1:180
 
 like(mhttp_post('/upstream/dyhost', 'ip_hash;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/success/m, '2013-03-04 15:53:41');
 
-like(mhttp_post('/upstream/dyhost', 'ip_hash aaa;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:36:40');
-like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/commands error/m, '2013-03-05 15:37:25');
+like(mhttp_post('/upstream/dyhost', 'ip_hash aaa;server 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/add server failed/m, '2013-03-05 15:36:40');
+like(mhttp_post('/upstream/dyhost', 'ip_hash;aaserver 127.0.0.1:8088; server 127.0.0.1:8089;', 8081), qr/add server failed/m, '2013-03-05 15:37:25');
 
 like(mhttp_post('/upstream/dyhost', 'server unix:/tmp/dyupssocket;', 8081), qr/success/m, '2013-03-05 16:13:11');
 
