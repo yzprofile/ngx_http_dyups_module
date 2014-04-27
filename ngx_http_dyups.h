@@ -4,15 +4,15 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
-#include <ngx_http.h>
 
-
-extern ngx_flag_t ngx_http_dyups_api_enable;
 
 ngx_int_t ngx_dyups_update_upstream(ngx_str_t *name, ngx_buf_t *buf,
     ngx_str_t *rv);
 
 ngx_int_t ngx_dyups_delete_upstream(ngx_str_t *name, ngx_str_t *rv);
+
+
+extern ngx_flag_t ngx_http_dyups_api_enable;
 
 
 #endif

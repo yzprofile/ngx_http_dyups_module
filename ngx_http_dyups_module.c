@@ -1,4 +1,9 @@
+#include <ngx_http.h>
 #include <ngx_http_dyups.h>
+#ifdef NGX_DYUPS_LUA
+#include <ngx_http_dyups_lua.h>
+#endif
+
 
 #define NGX_DYUPS_DELETING     1
 #define NGX_DYUPS_DELETED      2
@@ -486,7 +491,11 @@ ngx_http_dyups_init(ngx_conf_t *cf)
                 "_dyups_upstream_down_host_");
     ngx_http_dyups_deleted_upstream.file_name = (u_char *) "dyups_upstream";
 
+#ifdef NGX_DYUPS_LUA
+    return ngx_http_dyups_lua_preload(cf);
+#else
     return NGX_OK;
+#endif
 }
 
 
@@ -659,7 +668,6 @@ ngx_http_dyups_exit_process(ngx_cycle_t *cycle)
 static ngx_int_t
 ngx_http_dyups_interface_handler(ngx_http_request_t *r)
 {
-    ngx_int_t     rc;
     ngx_array_t  *res;
     ngx_event_t  *timer;
 
@@ -2167,7 +2175,6 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *name, ngx_str_t *content,
     ngx_int_t     rc;
     ngx_buf_t     body;
     ngx_str_t     rv;
-    ngx_array_t  *res;
 
     if (flag == NGX_DYUPS_DELETE) {
 
