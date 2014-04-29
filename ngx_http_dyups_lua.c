@@ -26,10 +26,10 @@ ngx_http_lua_update_upstream(lua_State *L)
 
     status = ngx_dyups_update_upstream(&name, &buf, &rv);
 
-    lua_pushlstring(L, (char *) rv.data, rv.len);
     lua_pushinteger(L, (lua_Integer) status);
+    lua_pushlstring(L, (char *) rv.data, rv.len);
 
-    return 1;
+    return 2;
 }
 
 
@@ -47,10 +47,10 @@ ngx_http_lua_delete_upstream(lua_State *L)
 
     status = ngx_dyups_delete_upstream(&name, &rv);
 
-    lua_pushlstring(L, (char *) rv.data, rv.len);
     lua_pushinteger(L, (lua_Integer) status);
+    lua_pushlstring(L, (char *) rv.data, rv.len);
 
-    return 1;
+    return 2;
 }
 
 
