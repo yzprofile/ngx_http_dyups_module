@@ -19,7 +19,7 @@
 
 typedef struct {
     ngx_uint_t                     idx;
-    ngx_uint_t                    *count;
+    ngx_flag_t                    *ref;
     ngx_uint_t                     deleted;
     ngx_flag_t                     dynamic;
     ngx_pool_t                    *pool;
@@ -41,6 +41,7 @@ typedef struct {
 
 typedef struct {
     ngx_uint_t                           count;
+    ngx_flag_t                           ref;
     ngx_http_upstream_init_peer_pt       init;
 } ngx_http_dyups_upstream_srv_conf_t;
 
@@ -450,7 +451,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 
         if (duscf->dynamic) {
             dscf = duscf->upstream->srv_conf[ngx_http_dyups_module.ctx_index];
-            duscf->count = &dscf->count;
+            duscf->ref = &dscf->ref;
         }
     }
 
@@ -1447,11 +1448,11 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
         if (duscf->deleted == NGX_DYUPS_DELETING) {
 
             ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
-                          "[dyups] find upstream idx: %ui %ui"
-                          " requests in %V deleting",
-                          i, *(duscf->count), &duscf->upstream->host);
+                          "[dyups] find upstream idx: %ui ref: %ui "
+                          "on %V deleting",
+                          i, *(duscf->ref), &duscf->upstream->host);
 
-            if (*(duscf->count) == 0) {
+            if (*(duscf->ref) == 0) {
                 ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                               "[dyups] free dynamic upstream in find upstream"
                               " %ui", duscf->idx);
@@ -1582,7 +1583,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     }
 
     dscf = uscf->srv_conf[ngx_http_dyups_module.ctx_index];
-    duscf->count = &dscf->count;
+    duscf->ref = &dscf->ref;
     duscf->ctx = ctx;
     duscf->deleted = 0;
 
@@ -1872,7 +1873,9 @@ ngx_http_dyups_clean_request(void *data)
 {
     ngx_http_dyups_ctx_t  *ctx = data;
 
-    ctx->scf->count--;
+    if (ctx->scf->count == 0) {
+        ctx->scf->ref = 0;
+    }
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] http clean request count %i",
@@ -1886,6 +1889,7 @@ ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
     ngx_http_dyups_ctx_t  *ctx = data;
 
     ctx->scf->count++;
+    ctx->scf->ref = 1;
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream get handler count %i",
@@ -1904,6 +1908,8 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream free handler count %i",
                    ctx->scf->count);
+
+    ctx->scf->count--;
 
     ctx->free(pc, ctx->data, state);
 }
