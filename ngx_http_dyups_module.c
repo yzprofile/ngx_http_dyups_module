@@ -437,11 +437,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 
         ngx_memzero(duscf, sizeof(ngx_http_dyups_srv_conf_t));
 
-        duscf->pool = ngx_create_pool(512, cf->log);
-        if (duscf->pool == NULL) {
-            return NGX_ERROR;
-        }
-
+        duscf->pool = NULL;
         duscf->upstream = uscfp[i];
         duscf->dynamic = (uscfp[i]->port == 0
                           && uscfp[i]->srv_conf && uscfp[i]->servers
@@ -1458,8 +1454,11 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
                               " %ui", duscf->idx);
 
                 duscf->deleted = NGX_DYUPS_DELETED;
-                ngx_destroy_pool(duscf->pool);
-                duscf->pool = NULL;
+
+                if (duscf->pool) {
+                    ngx_destroy_pool(duscf->pool);
+                    duscf->pool = NULL;
+                }
             }
         }
 
