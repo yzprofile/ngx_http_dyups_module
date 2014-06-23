@@ -204,14 +204,29 @@ content_by_lua '
 
     local status, rv = dyups.update("test", [[server 127.0.0.1:8088;]]);
     ngx.print(status, rv)
+    if status ~= 200 then
+        ngx.print(status, rv)
+        return
+    end
+    ngx.print("update success")
 
     status, rv = dyups.delete("test")
-    ngx.print(status, rv)
+    if status ~= 200 then
+        ngx.print(status, rv)
+        return
+    end
+    ngx.print("delete success")
 ';
 
 ```
 
+
 ## Change Log
+
+### RELEASE V0.2.7
+
+Supported: C API and Lua API
+
 
 ### RELEASE V0.2.6
 Bugfixed: Supported sandbox before updatting
