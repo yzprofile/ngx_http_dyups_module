@@ -259,7 +259,7 @@ $ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove ./dyups.t
 
 These codes are licenced under the BSD license.
 
-Copyright (C) 2012-2013 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>, Alibaba Inc.
+Copyright (C) 2012-2014 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>, Alibaba Inc.
 
 All rights reserved.
 
