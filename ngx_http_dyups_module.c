@@ -1887,14 +1887,22 @@ ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
 {
     ngx_http_dyups_ctx_t  *ctx = data;
 
-    ctx->scf->count++;
-    ctx->scf->ref = 1;
+    ngx_int_t  rc;
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "[dyups] dynamic upstream get handler count %i",
                    ctx->scf->count);
 
-    return ctx->get(pc, ctx->data);
+    rc = ctx->get(pc, ctx->data);
+
+    if (!pc->sockaddr) {
+        return rc;
+    }
+
+    ctx->scf->count++;
+    ctx->scf->ref = 1;
+
+    return rc;
 }
 
 
