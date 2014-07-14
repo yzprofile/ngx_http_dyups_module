@@ -19,7 +19,7 @@
 
 typedef struct {
     ngx_uint_t                     idx;
-    ngx_flag_t                    *ref;
+    ngx_uint_t                    *ref;
     ngx_uint_t                     deleted;
     ngx_flag_t                     dynamic;
     ngx_pool_t                    *pool;
@@ -40,18 +40,9 @@ typedef struct {
 
 
 typedef struct {
-    ngx_uint_t                           count;
-    ngx_flag_t                           ref;
+    ngx_uint_t                           ref;
     ngx_http_upstream_init_peer_pt       init;
 } ngx_http_dyups_upstream_srv_conf_t;
-
-
-typedef struct {
-    void                                *data;
-    ngx_http_dyups_upstream_srv_conf_t  *scf;
-    ngx_event_get_peer_pt                get;
-    ngx_event_free_peer_pt               free;
-} ngx_http_dyups_ctx_t;
 
 
 typedef struct ngx_dyups_status_s {
@@ -110,9 +101,6 @@ static void ngx_dyups_mark_upstream_delete(ngx_http_dyups_srv_conf_t *duscf);
 static ngx_int_t ngx_http_dyups_init_peer(ngx_http_request_t *r,
     ngx_http_upstream_srv_conf_t *us);
 static void *ngx_http_dyups_create_srv_conf(ngx_conf_t *cf);
-static ngx_int_t ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data);
-static void ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
-    ngx_uint_t state);
 static ngx_buf_t *ngx_http_dyups_show_list(ngx_http_request_t *r);
 static ngx_buf_t *ngx_http_dyups_show_detail(ngx_http_request_t *r);
 static ngx_buf_t *ngx_http_dyups_show_upstream(ngx_http_request_t *r,
@@ -1830,7 +1818,6 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
 {
     ngx_int_t                            rc;
     ngx_pool_cleanup_t                  *cln;
-    ngx_http_dyups_ctx_t                *ctx;
     ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
     dscf = us->srv_conf[ngx_http_dyups_module.ctx_index];
@@ -1841,27 +1828,15 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
         return rc;
     }
 
-    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_dyups_ctx_t));
-    if (ctx == NULL) {
-        return NGX_ERROR;
-    }
-
-    ctx->scf = dscf;
-    ctx->data = r->upstream->peer.data;
-    ctx->get = r->upstream->peer.get;
-    ctx->free = r->upstream->peer.free;
-
-    r->upstream->peer.data = ctx;
-    r->upstream->peer.get = ngx_http_dyups_get_peer;
-    r->upstream->peer.free = ngx_http_dyups_free_peer;
-
     cln = ngx_pool_cleanup_add(r->pool, 0);
     if (cln == NULL) {
         return NGX_ERROR;
     }
 
+    dscf->ref++;
+
     cln->handler = ngx_http_dyups_clean_request;
-    cln->data = ctx;
+    cln->data = &dscf->ref;
 
     return NGX_OK;
 }
@@ -1870,55 +1845,12 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
 static void
 ngx_http_dyups_clean_request(void *data)
 {
-    ngx_http_dyups_ctx_t  *ctx = data;
+    ngx_uint_t  *ref = data;
 
-    if (ctx->scf->count == 0) {
-        ctx->scf->ref = 0;
-    }
+    (*ref)--;
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                   "[dyups] http clean request count %i",
-                   ctx->scf->count);
-}
-
-
-static ngx_int_t
-ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
-{
-    ngx_http_dyups_ctx_t  *ctx = data;
-
-    ngx_int_t  rc;
-
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                   "[dyups] dynamic upstream get handler count %i",
-                   ctx->scf->count);
-
-    rc = ctx->get(pc, ctx->data);
-
-    if (!pc->sockaddr) {
-        return rc;
-    }
-
-    ctx->scf->count++;
-    ctx->scf->ref = 1;
-
-    return rc;
-}
-
-
-static void
-ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
-    ngx_uint_t state)
-{
-    ngx_http_dyups_ctx_t  *ctx = data;
-
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                   "[dyups] dynamic upstream free handler count %i",
-                   ctx->scf->count);
-
-    ctx->scf->count--;
-
-    ctx->free(pc, ctx->data, state);
+                   "[dyups] http clean request count %i", *ref);
 }
 
 
