@@ -1905,7 +1905,7 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                       "[dyups] dynamic upstream free peer may cause memleak %i",
                       ctx->scf->ref);
-        return;
+        goto done;
     }
 
     cln->handler = ngx_http_dyups_clean_request;
