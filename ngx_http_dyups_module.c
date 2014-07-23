@@ -45,6 +45,14 @@ typedef struct {
 } ngx_http_dyups_upstream_srv_conf_t;
 
 
+typedef struct {
+    void                                *data;
+    ngx_http_dyups_upstream_srv_conf_t  *scf;
+    ngx_event_get_peer_pt                get;
+    ngx_event_free_peer_pt               free;
+} ngx_http_dyups_ctx_t;
+
+
 typedef struct ngx_dyups_status_s {
     ngx_pid_t                            pid;
     ngx_msec_t                           time;
@@ -100,6 +108,9 @@ static ngx_int_t ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf,
 static void ngx_dyups_mark_upstream_delete(ngx_http_dyups_srv_conf_t *duscf);
 static ngx_int_t ngx_http_dyups_init_peer(ngx_http_request_t *r,
     ngx_http_upstream_srv_conf_t *us);
+static ngx_int_t ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data);
+static void ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
+    ngx_uint_t state);
 static void *ngx_http_dyups_create_srv_conf(ngx_conf_t *cf);
 static ngx_buf_t *ngx_http_dyups_show_list(ngx_http_request_t *r);
 static ngx_buf_t *ngx_http_dyups_show_detail(ngx_http_request_t *r);
@@ -1818,6 +1829,7 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
 {
     ngx_int_t                            rc;
     ngx_pool_cleanup_t                  *cln;
+    ngx_http_dyups_ctx_t                *ctx;
     ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
     dscf = us->srv_conf[ngx_http_dyups_module.ctx_index];
@@ -1827,6 +1839,20 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
     if (rc != NGX_OK) {
         return rc;
     }
+
+    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_dyups_ctx_t));
+    if (ctx == NULL) {
+        return NGX_ERROR;
+    }
+
+    ctx->scf = dscf;
+    ctx->data = r->upstream->peer.data;
+    ctx->get = r->upstream->peer.get;
+    ctx->free = r->upstream->peer.free;
+
+    r->upstream->peer.data = ctx;
+    r->upstream->peer.get = ngx_http_dyups_get_peer;
+    r->upstream->peer.free = ngx_http_dyups_free_peer;
 
     cln = ngx_pool_cleanup_add(r->pool, 0);
     if (cln == NULL) {
@@ -1839,6 +1865,55 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
     cln->data = &dscf->ref;
 
     return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_dyups_get_peer(ngx_peer_connection_t *pc, void *data)
+{
+    ngx_http_dyups_ctx_t  *ctx = data;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] dynamic upstream get handler count %i",
+                   ctx->scf->ref);
+
+    return ctx->get(pc, ctx->data);
+}
+
+
+static void
+ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
+    ngx_uint_t state)
+{
+    ngx_http_dyups_ctx_t  *ctx = data;
+
+    ngx_pool_cleanup_t  *cln;
+
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] dynamic upstream free handler count %i",
+                   ctx->scf->ref);
+
+    if (pc->cached) {
+        goto done;
+    }
+
+    ctx->scf->ref++;
+
+    cln = ngx_pool_cleanup_add(pc->connection->pool, 0);
+    if (cln == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                      "[dyups] dynamic upstream free peer may cause memleak %i",
+                      ctx->scf->ref);
+        return;
+    }
+
+    cln->handler = ngx_http_dyups_clean_request;
+    cln->data = &ctx->scf->ref;
+
+ done:
+
+    ctx->free(pc, ctx->data, state);
 }
 
 
