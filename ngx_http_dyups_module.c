@@ -1086,6 +1086,8 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
     ngx_buf_t                   *body;
     ngx_array_t                 *res;
 
+    ngx_str_set(&rv, "");
+
     if (r->method != NGX_HTTP_POST) {
         status = NGX_HTTP_NOT_ALLOWED;
         goto finish;
@@ -1113,8 +1115,6 @@ ngx_http_dyups_body_handler(ngx_http_request_t *r)
 
         body = ngx_http_dyups_read_body(r);
     }
-
-    ngx_str_set(&rv, "");
 
     if (body == NULL) {
         status = NGX_HTTP_INTERNAL_SERVER_ERROR;
