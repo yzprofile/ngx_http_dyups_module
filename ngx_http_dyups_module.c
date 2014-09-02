@@ -1551,6 +1551,10 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ctx->main_conf = ((ngx_http_conf_ctx_t *)
                       ngx_cycle->conf_ctx[ngx_http_module.index])->main_conf;
 
+	//ctx 设置
+	cf.ctx = ngx_cycle->conf_ctx[ngx_http_module.index];
+
+
     ctx->srv_conf = ngx_pcalloc(cf.pool, sizeof(void *) * ngx_http_max_module);
     if (ctx->srv_conf == NULL) {
         return NGX_ERROR;
