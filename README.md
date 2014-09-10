@@ -198,6 +198,10 @@ ngx_int_t ngx_dyups_delete_upstream(ngx_str_t *name, ngx_str_t *rv);
 ```
 
 ## Lua API Example
+
+NOTICE:
+    you should add the directive `dyups_interface` into your config file to active this feature
+
 ```lua
 content_by_lua '
     local dyups = require "ngx.dyups"
