@@ -1911,6 +1911,11 @@ ngx_http_dyups_free_peer(ngx_peer_connection_t *pc, void *data,
                    "[dyups] dynamic upstream free handler count %i",
                    ctx->scf->ref);
 
+    /* upstream connect failed */
+    if (pc->connection == NULL) {
+        goto done;
+    }
+
     if (pc->cached) {
         goto done;
     }
