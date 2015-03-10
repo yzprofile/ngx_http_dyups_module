@@ -227,6 +227,11 @@ content_by_lua '
 
 ## Change Log
 
+### RELEASE V0.2.8
+
+Bugfixed: upstream connect failed caused coredump
+
+
 ### RELEASE V0.2.7
 
 Supported: C API and Lua API
