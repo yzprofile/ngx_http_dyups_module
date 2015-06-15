@@ -272,11 +272,7 @@ Bugfixed: Supported sandbox before updatting
 ## Run Tests
 
 ```bash
-$ cd /path/to/nginx-tests
-
-$ ln /path/to/dynamic_upstream_dir/t/dyups.t ./
-
-$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove ./dyups.t
+$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I /path/to/tests/nginx-tests/lib ./dyups.t
 ```
 
 ## Copyright & License
