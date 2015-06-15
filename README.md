@@ -36,14 +36,14 @@ file: conf/nginx.conf
         server {
             listen 8088;
             location / {
-                echo 8088;
+                return 200 "8088";
             }
         }
 
         server {
             listen 8089;
             location / {
-                echo 8089;
+                return 200 "8089";
             }
         }
 
