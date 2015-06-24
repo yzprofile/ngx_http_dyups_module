@@ -3,7 +3,7 @@ This module can be used to update your upstream-list without reloadding Nginx.
 
 And this module compatible with [lua-upstream-nginx-module](https://github.com/agentzh/lua-upstream-nginx-module), You can use `lua-upstream-nginx-module` to get more detail infomation of upstream.
 
-This module has been merged into tengine
+This module has been merged into [tengine](https://github.com/alibaba/tengine)
 
 ### Config Example
 
