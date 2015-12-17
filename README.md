@@ -17,8 +17,6 @@ file: conf/nginx.conf
 
     http {
 
-        dyups_upstream_conf  conf/upstream.conf;
-
         include conf/upstream.conf;
 
         server {
@@ -106,7 +104,7 @@ Default: `none`
 
 Context: `main`
 
-This directive set the path of file which you dumped all of upstreams' configs, it will be loaded in `init process` after process respwan to restore upstreams.
+This directive has been deprecated
 
 
 Syntax: **dyups_trylock** `on | off`
