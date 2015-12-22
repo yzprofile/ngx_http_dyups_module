@@ -32,7 +32,6 @@ typedef struct {
     ngx_flag_t                     enable;
     ngx_flag_t                     trylock;
     ngx_array_t                    dy_upstreams;/* ngx_http_dyups_srv_conf_t */
-    ngx_str_t                      conf_path;
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
     ngx_msec_t                     read_msg_timeout;
@@ -175,13 +174,6 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       offsetof(ngx_http_dyups_main_conf_t, shm_size),
       NULL },
 
-    { ngx_string("dyups_upstream_conf"),
-      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
-      NGX_HTTP_MAIN_CONF_OFFSET,
-      offsetof(ngx_http_dyups_main_conf_t, conf_path),
-      NULL },
-
     { ngx_string("dyups_trylock"),
       NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_flag_slot,
@@ -278,10 +270,6 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
     dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
     dmcf->trylock = NGX_CONF_UNSET;
-
-    /*
-      dmcf->conf_path = nil
-     */
 
     return dmcf;
 }
