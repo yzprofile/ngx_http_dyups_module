@@ -2293,8 +2293,10 @@ static ngx_int_t
 ngx_dyups_del_upstream_filter(ngx_http_upstream_main_conf_t *umcf,
     ngx_http_upstream_srv_conf_t *uscf)
 {
-    ngx_uint_t  i;
+    ngx_uint_t                  i;
+    ngx_http_upstream_server_t  *us;
 
+    us = uscf->servers->elts;
     for (i = 0; i < uscf->servers->nelts; i++) {
 #if (NGX_HTTP_UPSTREAM_CHECK)
         if (us[i].addrs) {
