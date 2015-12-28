@@ -189,6 +189,12 @@ extern ngx_flag_t ngx_http_dyups_api_enable;
 ngx_int_t ngx_dyups_update_upstream(ngx_str_t *name, ngx_buf_t *buf,
     ngx_str_t *rv);
 ngx_int_t ngx_dyups_delete_upstream(ngx_str_t *name, ngx_str_t *rv);
+
+ngx_int_t (*ngx_dyups_add_upstream_top_filter)
+    (ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
+ngx_int_t (*ngx_dyups_del_upstream_top_filter)
+    (ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
+
 ```
 
 ## Lua API Example
@@ -220,6 +226,10 @@ content_by_lua '
 
 
 ## Change Log
+
+### RELEASE V0.2.9
+
+Featuer: Added add/del upstream filter to make other modules operate upstream easily after upstream changed
 
 ### RELEASE V0.2.8
 
