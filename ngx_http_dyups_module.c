@@ -85,6 +85,7 @@ typedef struct ngx_dyups_msg_s {
 } ngx_dyups_msg_t;
 
 
+static ngx_int_t ngx_http_dyups_pre_conf(ngx_conf_t *cf);
 static ngx_int_t ngx_http_dyups_init(ngx_conf_t *cf);
 static void *ngx_http_dyups_create_main_conf(ngx_conf_t *cf);
 static char *ngx_http_dyups_init_main_conf(ngx_conf_t *cf, void *conf);
@@ -142,6 +143,7 @@ static ngx_int_t ngx_dyups_restore_upstreams(ngx_cycle_t *cycle);
 static void ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid);
 static void ngx_http_dyups_clean_request(void *data);
 
+
 #if (NGX_HTTP_SSL)
 static ngx_int_t ngx_http_dyups_set_peer_session(ngx_peer_connection_t *pc,
     void *data);
@@ -149,6 +151,17 @@ static void ngx_http_dyups_save_peer_session(ngx_peer_connection_t *pc,
     void *data);
 #endif
 
+
+static ngx_int_t ngx_dyups_add_upstream_filter(
+    ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
+static ngx_int_t ngx_dyups_del_upstream_filter(
+    ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
+
+
+ngx_int_t (*ngx_dyups_add_upstream_top_filter)
+    (ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
+ngx_int_t (*ngx_dyups_del_upstream_top_filter)
+    (ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
 
 
 static ngx_command_t  ngx_http_dyups_commands[] = {
@@ -186,7 +199,7 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
 
 
 static ngx_http_module_t  ngx_http_dyups_module_ctx = {
-    NULL,                             /* preconfiguration */
+    ngx_http_dyups_pre_conf,          /* preconfiguration */
     ngx_http_dyups_init,              /* postconfiguration */
 
     ngx_http_dyups_create_main_conf,  /* create main configuration */
@@ -215,10 +228,21 @@ ngx_module_t  ngx_http_dyups_module = {
     NGX_MODULE_V1_PADDING
 };
 
+
 ngx_flag_t ngx_http_dyups_api_enable = 0;
 static ngx_http_upstream_srv_conf_t ngx_http_dyups_deleted_upstream;
 static ngx_uint_t ngx_http_dyups_shm_generation = 0;
 static ngx_dyups_global_ctx_t ngx_dyups_global_ctx;
+
+
+static ngx_int_t
+ngx_http_dyups_pre_conf(ngx_conf_t *cf)
+{
+    ngx_dyups_add_upstream_top_filter = ngx_dyups_add_upstream_filter;
+    ngx_dyups_del_upstream_top_filter = ngx_dyups_del_upstream_filter;
+
+    return NGX_OK;
+}
 
 
 static char *
@@ -1537,11 +1561,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     duscf->ctx = ctx;
     duscf->deleted = 0;
 
-#if (NGX_HTTP_UPSTREAM_RBTREE)
-    uscf->node.key = ngx_crc32_short(uscf->host.data, uscf->host.len);
-
-    ngx_rbtree_insert(&umcf->rbtree, &uscf->node);
-#endif
+    ngx_dyups_add_upstream_top_filter(umcf, uscf);
 
     return NGX_OK;
 }
@@ -1563,6 +1583,8 @@ ngx_dyups_mark_upstream_delete(ngx_http_dyups_srv_conf_t *duscf)
     ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
                   "[dyups] delete upstream \"%V\"", &duscf->upstream->host);
 
+    ngx_dyups_del_upstream_top_filter(umcf, uscf);
+
     us = uscf->servers->elts;
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
@@ -1576,11 +1598,6 @@ ngx_dyups_mark_upstream_delete(ngx_http_dyups_srv_conf_t *duscf)
     }
 
     uscfp[duscf->idx] = &ngx_http_dyups_deleted_upstream;
-
-#if (NGX_HTTP_UPSTREAM_RBTREE)
-    ngx_rbtree_delete(&umcf->rbtree, &uscf->node);
-#endif
-
     duscf->deleted = NGX_DYUPS_DELETING;
 }
 
@@ -2255,3 +2272,41 @@ ngx_http_dyups_save_peer_session(ngx_peer_connection_t *pc, void *data)
 }
 
 #endif
+
+
+static ngx_int_t
+ngx_dyups_add_upstream_filter(ngx_http_upstream_main_conf_t *umcf,
+    ngx_http_upstream_srv_conf_t *uscf)
+{
+
+#if (NGX_HTTP_UPSTREAM_RBTREE)
+    uscf->node.key = ngx_crc32_short(uscf->host.data, uscf->host.len);
+
+    ngx_rbtree_insert(&umcf->rbtree, &uscf->node);
+#endif
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_dyups_del_upstream_filter(ngx_http_upstream_main_conf_t *umcf,
+    ngx_http_upstream_srv_conf_t *uscf)
+{
+    ngx_uint_t  i;
+
+    for (i = 0; i < uscf->servers->nelts; i++) {
+#if (NGX_HTTP_UPSTREAM_CHECK)
+        if (us[i].addrs) {
+            ngx_http_upstream_check_delete_dynamic_peer(&uscf->host,
+                                                        us[i].addrs);
+        }
+#endif
+    }
+
+#if (NGX_HTTP_UPSTREAM_RBTREE)
+    ngx_rbtree_delete(&umcf->rbtree, &uscf->node);
+#endif
+
+    return NGX_OK;
+}
