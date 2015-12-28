@@ -190,10 +190,8 @@ ngx_int_t ngx_dyups_update_upstream(ngx_str_t *name, ngx_buf_t *buf,
     ngx_str_t *rv);
 ngx_int_t ngx_dyups_delete_upstream(ngx_str_t *name, ngx_str_t *rv);
 
-ngx_int_t (*ngx_dyups_add_upstream_top_filter)
-    (ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
-ngx_int_t (*ngx_dyups_del_upstream_top_filter)
-    (ngx_http_upstream_main_conf_t *umcf, ngx_http_upstream_srv_conf_t *uscf);
+extern ngx_dyups_add_upstream_filter_pt ngx_dyups_add_upstream_top_filter;
+extern ngx_dyups_del_upstream_filter_pt ngx_dyups_del_upstream_top_filter;
 
 ```
 
