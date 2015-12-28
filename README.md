@@ -208,14 +208,14 @@ content_by_lua '
 
     local status, rv = dyups.update("test", [[server 127.0.0.1:8088;]]);
     ngx.print(status, rv)
-    if status ~= 200 then
+    if status ~= ngx.HTTP_OK then
         ngx.print(status, rv)
         return
     end
     ngx.print("update success")
 
     status, rv = dyups.delete("test")
-    if status ~= 200 then
+    if status ~= ngx.HTTP_OK then
         ngx.print(status, rv)
         return
     end
