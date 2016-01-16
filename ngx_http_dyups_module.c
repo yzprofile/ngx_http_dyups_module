@@ -546,6 +546,8 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
         return NGX_OK;
     }
 
+    ngx_http_dyups_api_enable = 1;
+
     timer = &ngx_dyups_global_ctx.msg_timer;
     ngx_memzero(timer, sizeof(ngx_event_t));
 
