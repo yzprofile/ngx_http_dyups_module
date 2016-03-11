@@ -1376,6 +1376,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_buf_t *buf)
     ngx_memzero(&cf, sizeof(ngx_conf_t));
     cf.name = "dyups_init_module_conf";
     cf.pool = duscf->pool;
+    cf.cycle = (ngx_cycle_t *) ngx_cycle;
     cf.module_type = NGX_HTTP_MODULE;
     cf.cmd_type = NGX_HTTP_UPS_CONF;
     cf.log = ngx_cycle->log;
@@ -1391,11 +1392,13 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_buf_t *buf)
 
     ngx_memzero(&cf, sizeof(ngx_conf_t));
     cf.name = "dyups_init_upstream";
+    cf.cycle = (ngx_cycle_t *) ngx_cycle;
     cf.pool = duscf->pool;
     cf.module_type = NGX_HTTP_MODULE;
     cf.cmd_type = NGX_HTTP_MAIN_CONF;
     cf.log = ngx_cycle->log;
     cf.ctx = duscf->ctx;
+
 
     init = uscf->peer.init_upstream ? uscf->peer.init_upstream:
         ngx_http_upstream_init_round_robin;
