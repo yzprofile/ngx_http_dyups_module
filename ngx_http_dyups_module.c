@@ -946,7 +946,7 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
         len += duscf->upstream->host.len + 1;
 
         for (j = 0; j < duscf->upstream->servers->nelts; j++) {
-            len += sizeof("server ") + 128;
+            len += sizeof("server ") + 256;
         }
     }
 
