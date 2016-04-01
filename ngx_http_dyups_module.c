@@ -1620,13 +1620,6 @@ ngx_dyups_mark_upstream_delete(ngx_http_dyups_srv_conf_t *duscf)
     us = uscf->servers->elts;
     for (i = 0; i < uscf->servers->nelts; i++) {
         us[i].down = 1;
-
-#if (NGX_HTTP_UPSTREAM_CHECK)
-        if (us[i].addrs) {
-            ngx_http_upstream_check_delete_dynamic_peer(&uscf->host,
-                                                        us[i].addrs);
-        }
-#endif
     }
 
     uscfp[duscf->idx] = &ngx_http_dyups_deleted_upstream;
