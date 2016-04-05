@@ -5,6 +5,8 @@ And this module compatible with [lua-upstream-nginx-module](https://github.com/a
 
 This module has been merged into [tengine](https://github.com/alibaba/tengine)
 
+It works well with patched [nginx_upstream_check_module](https://github.com/yzprofile/nginx_upstream_check_module)
+
 ### Config Example
 
 file: conf/nginx.conf
@@ -281,6 +283,7 @@ $ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I /path/to/tests/n
 
 These codes are licenced under the BSD license.
 
+Copyright (C) 2015-2016 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>
 Copyright (C) 2012-2015 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>, Alibaba Inc.
 
 All rights reserved.
