@@ -59,7 +59,7 @@ If your original config looks like this:
 
 please replace it with:
 
-    set $ups upstream_name
+    set $ups upstream_name;
     proxy_pass http://$ups;
 
 `$ups` can be any valid nginx variable.
