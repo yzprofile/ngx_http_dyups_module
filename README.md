@@ -27,7 +27,8 @@ file: conf/nginx.conf
             listen   8080;
 
             location / {
-                proxy_pass http://$host; //The upstream here must be a nginx variable!
+                # The upstream here must be a nginx variable
+                proxy_pass http://$host; 
             }
         }
 
