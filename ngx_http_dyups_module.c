@@ -1830,6 +1830,10 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
 
     rc = dscf->init(r, us);
 
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "[dyups] dynamic upstream init peer: %i",
+                   rc);
+
     if (rc != NGX_OK) {
         return rc;
     }
@@ -2303,6 +2307,11 @@ static ngx_int_t
 ngx_dyups_add_upstream_filter(ngx_http_upstream_main_conf_t *umcf,
     ngx_http_upstream_srv_conf_t *uscf)
 {
+#if (NGX_HTTP_UPSTREAM_RBTREE)
+    uscf->node.key = ngx_crc32_short(uscf->host.data, uscf->host.len);
+    ngx_rbtree_insert(&umcf->rbtree, &uscf->node);
+#endif
+
     return NGX_OK;
 }
 
@@ -2311,6 +2320,9 @@ static ngx_int_t
 ngx_dyups_del_upstream_filter(ngx_http_upstream_main_conf_t *umcf,
     ngx_http_upstream_srv_conf_t *uscf)
 {
+#if (NGX_HTTP_UPSTREAM_RBTREE)
+    ngx_rbtree_delete(&umcf->rbtree, &uscf->node);
+#endif
     return NGX_OK;
 }
 
