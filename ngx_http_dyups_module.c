@@ -1538,8 +1538,9 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     uscf->file_name = (u_char *) "dynamic_upstream";
     uscf->line = 0;
     uscf->port = 0;
+#if nginx_version < 1011006
     uscf->default_port = 0;
-
+#endif
     uscfp[index] = uscf;
 
     duscf->dynamic = 1;
