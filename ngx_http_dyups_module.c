@@ -1499,9 +1499,9 @@ static ngx_int_t
 ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ngx_uint_t index)
 {
-    void                                *mconf;
-    ngx_uint_t                           m;
+    ngx_uint_t                           mi, m;
     ngx_conf_t                           cf;
+    ngx_module_t                        **modules;
     ngx_http_module_t                   *module;
     ngx_http_conf_ctx_t                 *ctx;
     ngx_http_upstream_srv_conf_t        *uscf, **uscfp;
@@ -1568,24 +1568,29 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ctx->srv_conf[ngx_http_upstream_module.ctx_index] = uscf;
     uscf->srv_conf = ctx->srv_conf;
 
-    for (m = 0; ngx_modules[m]; m++) {
-        if (ngx_modules[m]->type != NGX_HTTP_MODULE) {
+#if nginx_version >= 1009011
+    modules = ngx_cycle->modules;
+#else
+    modules = ngx_modules;
+#endif
+
+    for (m = 0; modules[m]; m++) {
+        if (modules[m]->type != NGX_HTTP_MODULE) {
             continue;
         }
 
-        if (ngx_modules[m]->index == ngx_http_core_module.index) {
+        if (modules[m]->index == ngx_http_core_module.index) {
             continue;
         }
 
-        module = ngx_modules[m]->ctx;
+        module = modules[m]->ctx;
+        mi = modules[m]->ctx_index;
 
         if (module->create_srv_conf) {
-            mconf = module->create_srv_conf(&cf);
-            if (mconf == NULL) {
+            ctx->srv_conf[mi] = module->create_srv_conf(&cf);
+            if (ctx->srv_conf[mi] == NULL) {
                 return NGX_ERROR;
             }
-
-            ctx->srv_conf[ngx_modules[m]->ctx_index] = mconf;
         }
     }
 

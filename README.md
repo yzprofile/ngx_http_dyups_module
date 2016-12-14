@@ -80,8 +80,12 @@ file: conf/upstream.conf
 ```bash
 
 $ git clone git://github.com/yzprofile/ngx_http_dyups_module.git
+
+# to compile as a static module
 $ ./configure --add-module=./ngx_http_dyups_module
 
+# to compile as a dynamic module
+$ ./configure --add-dynamic-module=./ngx_http_dyups_module
 ```
 
 ## Directives
