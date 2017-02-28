@@ -135,6 +135,18 @@ Context: `main`
 You will get a better prefomance but it maybe not stable, and you will get a '409' when the update request conflicts with others.
 
 
+Syntax: **dyups_read_msg_log** `on | off`
+
+Default: `off`
+
+Context: `main`
+
+You can enable / disable log of workers readding the commands from share memory. The log looks like:
+
+```
+2017/02/28 15:37:53 [info] 56806#0: [dyups] has 0 upstreams, 1 static, 0 deleted, all 1
+```
+
 ## restful interface
 
 ### GET
