@@ -35,6 +35,7 @@ typedef struct {
     ngx_str_t                      shm_name;
     ngx_uint_t                     shm_size;
     ngx_msec_t                     read_msg_timeout;
+    ngx_flag_t                     read_msg_log;
 } ngx_http_dyups_main_conf_t;
 
 
@@ -182,6 +183,13 @@ static ngx_command_t  ngx_http_dyups_commands[] = {
       offsetof(ngx_http_dyups_main_conf_t, read_msg_timeout),
       NULL },
 
+    { ngx_string("dyups_read_msg_log"),
+      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_http_dyups_main_conf_t, read_msg_log),
+      NULL },
+
     { ngx_string("dyups_shm_zone_size"),
       NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_size_slot,
@@ -302,6 +310,7 @@ ngx_http_dyups_create_main_conf(ngx_conf_t *cf)
     dmcf->enable = NGX_CONF_UNSET;
     dmcf->shm_size = NGX_CONF_UNSET_UINT;
     dmcf->read_msg_timeout = NGX_CONF_UNSET_MSEC;
+    dmcf->read_msg_log = NGX_CONF_UNSET;
     dmcf->trylock = NGX_CONF_UNSET;
 
     return dmcf;
@@ -1979,9 +1988,11 @@ ngx_http_dyups_read_msg(ngx_event_t *ev)
         count++;
     }
 
-    ngx_log_error(NGX_LOG_INFO, ev->log, 0,
-                  "[dyups] has %ui upstreams, %ui static, %ui deleted, all %ui",
-                  count, s_count, d_count, dmcf->dy_upstreams.nelts);
+    if (dmcf->read_msg_log == 1) {
+        ngx_log_error(NGX_LOG_INFO, ev->log, 0,
+                      "[dyups] has %ui upstreams, %ui static, %ui deleted, all %ui",
+                      count, s_count, d_count, dmcf->dy_upstreams.nelts);
+    }
 
     ngx_shmtx_lock(&shpool->mutex);
 
