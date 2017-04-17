@@ -1134,7 +1134,7 @@ ngx_http_dyups_interface_read_body(ngx_http_request_t *r)
 static void
 ngx_http_dyups_body_handler(ngx_http_request_t *r)
 {
-    ngx_str_t                   *value, rv, name;
+    ngx_str_t                   *value, rv={0}, name;
     ngx_int_t                    status;
     ngx_buf_t                   *body;
     ngx_array_t                 *res;
