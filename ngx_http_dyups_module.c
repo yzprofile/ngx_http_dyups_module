@@ -984,10 +984,11 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
 
         us = duscf->upstream->servers->elts;
         for (j = 0; j < duscf->upstream->servers->nelts; j++) {
-            buf->last = ngx_sprintf(buf->last, "server %V weight=%i max_fails=%i "
+            buf->last = ngx_sprintf(buf->last, "server %V weight=%i max_conns=%i max_fails=%i "
                                     "fail_timeout=%T backup=%d down=%d\n",
                                     &us[j].addrs->name,
                                     us[j].weight,
+                                    us[j].max_conns,
                                     us[j].max_fails,
                                     us[j].fail_timeout,
                                     us[j].backup,
@@ -1536,6 +1537,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 
     uscf->flags = NGX_HTTP_UPSTREAM_CREATE
                  |NGX_HTTP_UPSTREAM_WEIGHT
+                 |NGX_HTTP_UPSTREAM_MAX_CONNS
                  |NGX_HTTP_UPSTREAM_MAX_FAILS
                  |NGX_HTTP_UPSTREAM_FAIL_TIMEOUT
                  |NGX_HTTP_UPSTREAM_DOWN
