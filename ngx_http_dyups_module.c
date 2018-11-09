@@ -984,11 +984,18 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
 
         us = duscf->upstream->servers->elts;
         for (j = 0; j < duscf->upstream->servers->nelts; j++) {
-            buf->last = ngx_sprintf(buf->last, "server %V weight=%i max_conns=%i max_fails=%i "
+            buf->last = ngx_sprintf(buf->last,
+                                    "server %V weight=%i "
+#ifdef NGX_HTTP_UPSTREAM_MAX_CONNS
+                                    "max_conns=%i "
+#endif
+                                    "max_fails=%i "
                                     "fail_timeout=%T backup=%d down=%d\n",
                                     &us[j].addrs->name,
                                     us[j].weight,
+#ifdef NGX_HTTP_UPSTREAM_MAX_CONNS
                                     us[j].max_conns,
+#endif
                                     us[j].max_fails,
                                     us[j].fail_timeout,
                                     us[j].backup,
@@ -1359,8 +1366,16 @@ ngx_dyups_sandbox_update(ngx_buf_t *buf, ngx_str_t *rv)
 static char *
 ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
 {
-    ngx_conf_file_t     conf_file;
-    ngx_buf_t           b;
+    char                       *rc;
+    ngx_buf_t                   b;
+    ngx_str_t                   s;
+    ngx_uint_t                  i;
+    ngx_hash_t                  vh, vh_prev;
+    ngx_array_t                 va, va_prev;
+    ngx_conf_file_t             conf_file;
+    ngx_http_variable_t        *v;
+    ngx_hash_keys_arrays_t      vk;
+    ngx_http_core_main_conf_t  *cmcf;
 
     b = *buf;   /* avoid modifying @buf */
 
@@ -1370,7 +1385,57 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
 
     cf->conf_file = &conf_file;
 
-    return ngx_conf_parse(cf, NULL);
+    rc = ngx_conf_parse(cf, NULL);
+    if (rc != NGX_CONF_OK) {
+        return rc;
+    }
+  
+    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
+  
+    va_prev = cmcf->variables;
+    vh_prev = cmcf->variables_hash;
+  
+    ngx_memzero(&va, sizeof(va));
+    ngx_memzero(&vh, sizeof(vh));
+    ngx_memzero(&vk, sizeof(vk));
+  
+    cmcf->variables      = va;
+    cmcf->variables_hash = vh;
+    cmcf->variables_keys = &vk;
+  
+    v = va_prev.elts;
+    for (i = 0; i < va_prev.nelts; i++) {
+
+        if (v[i].get_handler) {
+            continue;
+        }
+
+        s.len = v[i].name.len;
+        s.data = ngx_pstrdup(ngx_cycle->pool, &v[i].name);
+        if (!s.data) {
+            rc = NGX_CONF_ERROR;
+            break;
+        }
+
+        /*
+         * variable name will be assign to cmcf->variables[idx].name directly
+         * so the lifetime of v[i].name should be the same as cmcf
+         */
+        v[i].name = s;
+      
+        cmcf->variables.elts = &v[i];
+        cmcf->variables.nelts = 1;
+        if (ngx_http_variables_init_vars(cf) != NGX_OK) {
+            rc = NGX_CONF_ERROR;
+            break;
+        }
+    }
+  
+    cmcf->variables      = va_prev;
+    cmcf->variables_hash = vh_prev;
+    cmcf->variables_keys = NULL;
+  
+    return rc;
 }
 
 
@@ -1537,7 +1602,9 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
 
     uscf->flags = NGX_HTTP_UPSTREAM_CREATE
                  |NGX_HTTP_UPSTREAM_WEIGHT
+#ifdef NGX_HTTP_UPSTREAM_MAX_CONNS
                  |NGX_HTTP_UPSTREAM_MAX_CONNS
+#endif
                  |NGX_HTTP_UPSTREAM_MAX_FAILS
                  |NGX_HTTP_UPSTREAM_FAIL_TIMEOUT
                  |NGX_HTTP_UPSTREAM_DOWN
