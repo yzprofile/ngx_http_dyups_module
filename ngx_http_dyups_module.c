@@ -142,7 +142,6 @@ static ngx_int_t ngx_dyups_do_delete(ngx_str_t *name, ngx_str_t *rv);
 static ngx_int_t ngx_dyups_do_update(ngx_str_t *name, ngx_buf_t *buf,
     ngx_str_t *rv);
 static ngx_int_t ngx_dyups_sandbox_update(ngx_buf_t *buf, ngx_str_t *rv);
-static ngx_int_t ngx_dyups_restore_upstreams(ngx_cycle_t *cycle);
 static void ngx_dyups_purge_msg(ngx_pid_t opid, ngx_pid_t npid);
 static void ngx_http_dyups_clean_request(void *data);
 
@@ -534,7 +533,7 @@ ngx_http_dyups_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_dyups_init_process(ngx_cycle_t *cycle)
 {
-    ngx_int_t                    rc, i;
+    ngx_int_t                    i;
     ngx_pid_t                    pid;
     ngx_time_t                  *tp;
     ngx_msec_t                   now;
@@ -587,9 +586,9 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
         return NGX_OK;
     }
 
-    ngx_shmtx_unlock(&shpool->mutex);
-
     if (sh->version != 0) {
+        ngx_shmtx_unlock(&shpool->mutex);
+
         ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
                       "[dyups] process start after abnormal exits");
 
@@ -628,22 +627,9 @@ ngx_http_dyups_init_process(ngx_cycle_t *cycle)
                       ngx_pid, pid);
 
         ngx_dyups_purge_msg(pid, ngx_pid);
-
-        ngx_shmtx_unlock(&shpool->mutex);
-
-
-        ngx_shmtx_lock(&shpool->mutex);
-
-        rc = ngx_dyups_restore_upstreams(cycle);
-
-        ngx_shmtx_unlock(&shpool->mutex);
-
-        if (rc != NGX_OK) {
-            ngx_log_error(NGX_LOG_CRIT, cycle->log, 0,
-                          "[dyups] process restore upstream failed");
-        }
     }
 
+    ngx_shmtx_unlock(&shpool->mutex);
     return NGX_OK;
 }
 
@@ -2330,13 +2316,6 @@ ngx_dyups_sync_cmd(ngx_pool_t *pool, ngx_str_t *name, ngx_str_t *content,
     }
 
     return NGX_ERROR;
-}
-
-
-static ngx_int_t
-ngx_dyups_restore_upstreams(ngx_cycle_t *cycle)
-{
-    return NGX_OK;
 }
 
 
