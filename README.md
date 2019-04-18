@@ -11,7 +11,7 @@ It works well with patched [nginx_upstream_check_module](https://github.com/yzpr
 
 file: conf/nginx.conf
 
-**(:bangbang:Attention: You MUST use nginx variable to do proxy_pass)**
+**Attention: You MUST use nginx variable to do proxy_pass**
 
     daemon off;
     error_log logs/error.log debug;
@@ -28,7 +28,7 @@ file: conf/nginx.conf
 
             location / {
                 # The upstream here must be a nginx variable
-                proxy_pass http://$host; 
+                proxy_pass http://$host;
             }
         }
 
