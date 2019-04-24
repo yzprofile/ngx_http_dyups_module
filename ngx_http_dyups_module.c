@@ -1618,6 +1618,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     cf.cmd_type = NGX_HTTP_MAIN_CONF;
     cf.pool = duscf->pool;
     cf.ctx = ngx_cycle->conf_ctx[ngx_http_module.index];
+    cf.cycle = (ngx_cycle_t *) ngx_cycle;
 
     ctx = ngx_pcalloc(duscf->pool, sizeof(ngx_http_conf_ctx_t));
     if (ctx == NULL) {
