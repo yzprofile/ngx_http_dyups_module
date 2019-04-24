@@ -1375,20 +1375,20 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
     if (rc != NGX_CONF_OK) {
         return rc;
     }
-  
+
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-  
+
     va_prev = cmcf->variables;
     vh_prev = cmcf->variables_hash;
-  
+
     ngx_memzero(&va, sizeof(va));
     ngx_memzero(&vh, sizeof(vh));
     ngx_memzero(&vk, sizeof(vk));
-  
+
     cmcf->variables      = va;
     cmcf->variables_hash = vh;
     cmcf->variables_keys = &vk;
-  
+
     v = va_prev.elts;
     for (i = 0; i < va_prev.nelts; i++) {
 
@@ -1408,7 +1408,7 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
          * so the lifetime of v[i].name should be the same as cmcf
          */
         v[i].name = s;
-      
+
         cmcf->variables.elts = &v[i];
         cmcf->variables.nelts = 1;
         if (ngx_http_variables_init_vars(cf) != NGX_OK) {
@@ -1416,11 +1416,11 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
             break;
         }
     }
-  
+
     cmcf->variables      = va_prev;
     cmcf->variables_hash = vh_prev;
     cmcf->variables_keys = NULL;
-  
+
     return rc;
 }
 
