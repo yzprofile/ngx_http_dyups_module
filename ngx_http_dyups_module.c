@@ -1559,6 +1559,49 @@ ngx_dyups_find_upstream(ngx_str_t *name, ngx_int_t *idx)
 }
 
 
+#if HAVE_DYUPS_UPSTREAM_PATCH
+static ngx_int_t
+ngx_dyups_umcf_dyups_update(ngx_http_upstream_main_conf_t *umcf, ngx_str_t *name,
+    ngx_http_upstream_srv_conf_t *uscf)
+{
+    ngx_uint_t                     i;
+    ngx_flag_t                     found = 0;
+    ngx_http_upstream_dyup_t      *dyup, *dyupp;
+
+    dyupp = umcf->dyups.elts;
+
+    for (i = 0; i < umcf->dyups.nelts; i++) {
+        dyup = dyupp + i;
+
+        if (dyup->name.len == name->len
+            && ngx_strncasecmp(dyup->name.data, name->data, name->len) == 0)
+        {
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        dyup = ngx_array_push(&umcf->dyups);
+        if (dyup == NULL) {
+            return NGX_ERROR;
+        }
+
+        dyup->name.data = ngx_pstrdup(ngx_cycle->pool, name);
+        if (dyup->name.data == NULL) {
+            return NGX_ERROR;
+        }
+
+        dyup->name.len = name->len;
+    }
+
+    dyup->uscf = uscf;
+
+    return NGX_OK;
+}
+#endif
+
+
 static ngx_int_t
 ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     ngx_uint_t index)
@@ -1668,6 +1711,12 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     duscf->deleted = 0;
 
     ngx_dyups_add_upstream_top_filter(umcf, uscf);
+
+#if HAVE_DYUPS_UPSTREAM_PATCH
+    if (ngx_dyups_umcf_dyups_update(umcf, name, uscf) == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+#endif
 
     return NGX_OK;
 }
