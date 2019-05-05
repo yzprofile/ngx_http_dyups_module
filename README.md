@@ -54,11 +54,17 @@ file: conf/nginx.conf
         }
     }
 
-If your original config looks like this:
+If your original config looks like this, upstream is not variables:
 
     proxy_pass http://upstream_name;
 
-please replace it with:
+please appaly nginx-1.16.0-dyups_upstream.patch, like this:
+
+    patch -p1 < path/ngx_http_dyups_module/nginx-1.16.0-dyups_upstream.patch
+
+this patch allow dynamic upstream with upstream is not variable, but it can only be used to update upstream, can not be used to delete upstream. See the patch for detail.
+
+or replace it with:
 
     set $ups upstream_name;
     proxy_pass http://$ups;

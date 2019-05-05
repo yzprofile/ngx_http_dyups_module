@@ -13,7 +13,7 @@ use Test::Nginx;
 
 my $NGINX = defined $ENV{TEST_NGINX_BINARY} ? $ENV{TEST_NGINX_BINARY}
         : '../nginx/objs/nginx';
-my $t = Test::Nginx->new()->plan(76);
+my $t = Test::Nginx->new()->plan(92);
 
 sub mhttp_get($;$;$;%) {
     my ($url, $host, $port, %extra) = @_;
@@ -545,6 +545,119 @@ like(mhttp_get('/', 'dyhost', 8080), qr/8088/m, '5/ 5 11:04:42 2014');
 like(mhttp_get('/lua/delete', 'localhost', 8081), qr/200success/m, '5/ 5 11:08:08 2014');
 sleep(1);
 like(mhttp_get('/', 'dyhost', 8080), qr/502/m, '5/ 5 11:08:16 2014');
+
+
+$t->stop();
+unlink("/tmp/dyupssocket");
+
+##############################################################################
+
+$t->write_file_expand('nginx.conf', <<'EOF');
+
+%%TEST_GLOBALS%%
+
+daemon off;
+
+worker_processes auto;
+
+events {
+    accept_mutex off;
+}
+
+http {
+
+    upstream host1 {
+        server 127.0.0.1:8088;
+    }
+
+    upstream host2 {
+        server 127.0.0.1:8089;
+    }
+
+    server {
+        listen   8080;
+
+        location / {
+            proxy_pass http://host1;
+        }
+    }
+
+    server {
+        listen 8088;
+        location / {
+            return 200 "8088";
+        }
+    }
+
+    server {
+        listen unix:/tmp/dyupssocket;
+        location / {
+            return 200 "unix";
+        }
+    }
+
+    server {
+        listen 8089;
+        location / {
+            return 200 "8089";
+        }
+    }
+
+    server {
+        listen 8081;
+        location / {
+            dyups_interface;
+        }
+    }
+}
+EOF
+
+mrun($t);
+
+
+$rep = qr/
+host1
+host2
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2019-05-05 18:45:30');
+$rep = qr/
+host1
+server 127.0.0.1:8088 weight=1 .*
+
+host2
+server 127.0.0.1:8089 weight=1 .*
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '20132019-05-05 18:45:45');
+like(mhttp_get('/upstream/host1', 'localhost', 8081), qr/server 127.0.0.1:8088/m, '2019-05-05 18:45:55');
+
+###############################################################################
+
+like(mhttp_get('/', 'host1', 8080), qr/8088/m, '2019-05-05 18:46:30');
+
+like(mhttp_delete('/upstream/host1', 8081), qr/success/m, '2019-05-05 18:47:10');
+$rep = qr/
+host2
+/m;
+like(mhttp_get('/list', 'localhost', 8081), $rep, '2019-05-05 18:47:20');
+$rep = qr/
+host2
+server 127.0.0.1:8089 weight=1 .*
+/m;
+like(mhttp_get('/detail', 'localhost', 8081), $rep, '2019-05-05 18:47:30');
+
+like(mhttp_get('/', 'host1', 8080), qr/8088/m, '2019-05-05 18:48:10');
+
+like(mhttp_post('/upstream/host1', 'server 127.0.0.1:8089;', 8081), qr/success/m, '2019-05-05 18:49:20');
+like(mhttp_get('/', 'host1', 8080), qr/8089/m, '2019-05-05 18:49:35');
+
+like(mhttp_post('/upstream/host1', 'server unix:/tmp/dyupssocket;', 8081), qr/success/m, '2019-05-05 18:50:20');
+like(mhttp_get('/', 'host1', 8080), qr/unix/m, '2019-05-05 18:50:35');
+
+like(mhttp_post('/upstream/host1', 'server unix:/tmp/errsocket;', 8081), qr/success/m, '2019-05-05 18:51:20');
+like(mhttp_get('/', 'host1', 8080), qr/502/m, '2019-05-05 18:51:35');
+
+like(mhttp_post('/upstream/host1', 'server 127.0.0.1:8088;', 8081), qr/success/m, '2019-05-05 18:52:20');
+like(mhttp_get('/', 'host1', 8080), qr/8088/m, '2019-05-05 18:52:35');
 
 
 $t->stop();
