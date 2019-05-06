@@ -35,13 +35,14 @@ This module can be used to update your upstream-list without reloadding Nginx.
    * [Tengine Compatibility](#tengine-compatibility)
    * [Module Compatibility](#module-compatibility)
 * [Run Tests](#run-tests)
+* [Author](#author)
 * [Copyright &amp; License](#copyright--license)
 
 ## Example
 
 file: conf/nginx.conf
 
-**Attention: You MUST use nginx variable to do proxy_pass**
+`ATTENTION`: You MUST use nginx variable to do proxy_pass
 
     daemon off;
     error_log logs/error.log debug;
@@ -229,7 +230,7 @@ The /list and /detail interface will return `HTTP_NO_CONTENT 204` when there is 
 
 Other code means you should modify your commands and call the interface again.
 
-`ATTENEION`: You also need a `third-party` to generate the new config and dump it to Nginx'conf directory.
+`ATTENTION`: You also need a `third-party` to generate the new config and dump it to Nginx'conf directory.
 
 ### Sample
 
@@ -383,13 +384,18 @@ $ hg clone http://hg.nginx.org/nginx-tests/
 $ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I ./nginx-tests/lib ./t/dyups.t
 ```
 
+## Author
+
+yzprofile (袁茁) yzprofile@gmail.com
+
+chobits (王笑臣) wangxiaochen0@gmail.com, Alibaba Inc.
+
 ## Copyright & License
 
 These codes are licenced under the BSD license.
 
 ```
-Copyright (C) 2015-2016 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>
-Copyright (C) 2012-2015 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>, Alibaba Inc.
+Copyright (C) 2012-2018 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>, Alibaba Inc.
 
 All rights reserved.
 
