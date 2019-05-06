@@ -1375,20 +1375,20 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
     if (rc != NGX_CONF_OK) {
         return rc;
     }
-  
+
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-  
+
     va_prev = cmcf->variables;
     vh_prev = cmcf->variables_hash;
-  
+
     ngx_memzero(&va, sizeof(va));
     ngx_memzero(&vh, sizeof(vh));
     ngx_memzero(&vk, sizeof(vk));
-  
+
     cmcf->variables      = va;
     cmcf->variables_hash = vh;
     cmcf->variables_keys = &vk;
-  
+
     v = va_prev.elts;
     for (i = 0; i < va_prev.nelts; i++) {
 
@@ -1408,7 +1408,7 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
          * so the lifetime of v[i].name should be the same as cmcf
          */
         v[i].name = s;
-      
+
         cmcf->variables.elts = &v[i];
         cmcf->variables.nelts = 1;
         if (ngx_http_variables_init_vars(cf) != NGX_OK) {
@@ -1416,11 +1416,11 @@ ngx_dyups_parse_upstream(ngx_conf_t *cf, ngx_buf_t *buf)
             break;
         }
     }
-  
+
     cmcf->variables      = va_prev;
     cmcf->variables_hash = vh_prev;
     cmcf->variables_keys = NULL;
-  
+
     return rc;
 }
 
@@ -1618,6 +1618,7 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
     cf.cmd_type = NGX_HTTP_MAIN_CONF;
     cf.pool = duscf->pool;
     cf.ctx = ngx_cycle->conf_ctx[ngx_http_module.index];
+    cf.cycle = (ngx_cycle_t *) ngx_cycle;
 
     ctx = ngx_pcalloc(duscf->pool, sizeof(ngx_http_conf_ctx_t));
     if (ctx == NULL) {
@@ -2332,8 +2333,14 @@ ngx_http_dyups_set_peer_session(ngx_peer_connection_t *pc, void *data)
     ssl_session = ctx->ssl_session;
     rc = ngx_ssl_set_session(pc->connection, ssl_session);
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "set session: %p", ssl_session);
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                   "set session: %p:%d", ssl_session,
+#if OPENSSL_VERSION_NUMBER >= 0x10100003L
+                   SSL_get_ref(ssl_session)
+#else
+                   ssl_session ? ssl_session->references : 0
+#endif
+                  );
 
     return rc;
 }
@@ -2352,15 +2359,28 @@ ngx_http_dyups_save_peer_session(ngx_peer_connection_t *pc, void *data)
         return;
     }
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "save session: %p", ssl_session);
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                   "save session: %p:%d", ssl_session,
+#if OPENSSL_VERSION_NUMBER >= 0x10100003L
+                   SSL_get_ref(ssl_session)
+#else
+                   ssl_session->references
+#endif
+                  );
 
     old_ssl_session = ctx->ssl_session;
     ctx->ssl_session = ssl_session;
 
     if (old_ssl_session) {
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                       "old session: %p", old_ssl_session);
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                       "old session: %p:%d",
+                       old_ssl_session,
+#if OPENSSL_VERSION_NUMBER >= 0x10100003L
+                       SSL_get_ref(old_ssl_session)
+#else
+                       old_ssl_session->references
+#endif
+                      );
 
         ngx_ssl_free_session(old_ssl_session);
     }
