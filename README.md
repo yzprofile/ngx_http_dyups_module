@@ -379,7 +379,8 @@ This module has been merged into Tengine.
 ## Run Tests
 
 ```bash
-$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I /path/to/tests/nginx-tests/lib ./dyups.t
+$ hg clone http://hg.nginx.org/nginx-tests/
+$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I ./nginx-tests/lib ./t/dyups.t
 ```
 
 ## Copyright & License
