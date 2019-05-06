@@ -58,7 +58,7 @@ If your original config looks like this, upstream is not variables:
 
     proxy_pass http://upstream_name;
 
-please appaly nginx-1.16.0-dyups_upstream.patch, like this:
+please apply nginx-1.16.0-dyups_upstream.patch, like this:
 
     patch -p1 < path/ngx_http_dyups_module/nginx-1.16.0-dyups_upstream.patch
 
