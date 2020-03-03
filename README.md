@@ -380,9 +380,12 @@ This module has been merged into Tengine.
 ## Run Tests
 
 ```bash
-$ hg clone http://hg.nginx.org/nginx-tests/
-$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I ./nginx-tests/lib ./t/dyups.t
+$ hg clone http://hg.nginx.org/nginx-tests/ ..
+(Or git clone git@github.com:nginx/nginx-tests/ .. if you prefer the GitHub mirror)
+$ TEST_NGINX_BINARY=/path/to/your/nginx/dir/sbin/nginx prove -I ../nginx-tests/lib ./t/dyups.t
 ```
+
+To make the tests pass, you should also install lua-nginx-module and patched upstream check module.
 
 ## Author
 
