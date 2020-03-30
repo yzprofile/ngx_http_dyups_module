@@ -209,7 +209,7 @@ You can enable / disable log of workers readding the commands from share memory.
 
 ## restful interface
 
-### GET
+### GET (JSON Response Format)
 - `/detail`         get all upstreams and their servers
 - `/list`           get the list of upstreams
 - `/upstream/name`  find the upstream by it's name
@@ -254,25 +254,105 @@ success
 8088
 
 » curl 127.0.0.1:8081/detail
-host1
-server 127.0.0.1:8088 weight=1 max_conns=0 max_fails=1 fail_timeout=10 backup=0 down=0
-
-host2
-server 127.0.0.1:8089 weight=1 max_conns=0 max_fails=1 fail_timeout=10 backup=0 down=0
-
-dyhost
-server 127.0.0.1:8089 weight=1 max_conns=0 max_fails=1 fail_timeout=10 backup=0 down=0
-server 127.0.0.1:8088 weight=1 max_conns=0 max_fails=1 fail_timeout=10 backup=0 down=0
+[
+  {
+    "upstream_name": "host1",
+    "servers": [
+      {
+        "server": "127.0.0.1:8088",
+        "weight": 1,
+        "max_conns": 0,
+        "max_fails": 1,
+        "fail_timeout": 10,
+        "backup": 0,
+        "down": 0
+      }
+    ]
+  },
+  {
+    "upstream_name": "host2",
+    "servers": [
+      {
+        "server": "127.0.0.1:8089",
+        "weight": 1,
+        "max_conns": 0,
+        "max_fails": 1,
+        "fail_timeout": 10,
+        "backup": 0,
+        "down": 0
+      }
+    ]
+  },
+  {
+    "upstream_name": "dyhost",
+    "servers": [
+      {
+        "server": "127.0.0.1:8089",
+        "weight": 1,
+        "max_conns": 0,
+        "max_fails": 1,
+        "fail_timeout": 10,
+        "backup": 0,
+        "down": 0
+      },
+      {
+        "server": "127.0.0.1:8088",
+        "weight": 1,
+        "max_conns": 0,
+        "max_fails": 1,
+        "fail_timeout": 10,
+        "backup": 0,
+        "down": 0
+      }
+    ]
+  }
+]
 
 » curl -i -X DELETE 127.0.0.1:8081/upstream/dyhost
 success
 
 » curl 127.0.0.1:8081/detail
-host1
-server 127.0.0.1:8088 weight=1 max_conns=0 max_fails=1 fail_timeout=10 backup=0 down=0
+[
+  {
+    "upstream_name": "host1",
+    "servers": [
+      {
+        "server": "127.0.0.1:8088",
+        "weight": 1,
+        "max_conns": 0,
+        "max_fails": 1,
+        "fail_timeout": 10,
+        "backup": 0,
+        "down": 0
+      }
+    ]
+  },
+  {
+    "upstream_name": "host2",
+    "servers": [
+      {
+        "server": "127.0.0.1:8089",
+        "weight": 1,
+        "max_conns": 0,
+        "max_fails": 1,
+        "fail_timeout": 10,
+        "backup": 0,
+        "down": 0
+      }
+    ]
+  }
+]
 
-host2
-server 127.0.0.1:8089 weight=1 max_conns=0 max_fails=1 fail_timeout=10 backup=0 down=0
+» curl 127.0.0.1:8081/list
+[
+  "host1",
+  "host2"
+]
+
+» curl 127.0.0.1:8081/upstream/host1
+[
+  "127.0.0.1:8088"
+]
 ```
 
 ## C API
