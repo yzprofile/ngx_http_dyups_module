@@ -1021,11 +1021,11 @@ static ngx_buf_t *
 ngx_http_dyups_show_upstream(ngx_http_request_t *r,
     ngx_http_dyups_srv_conf_t *duscf)
 {
-    ngx_uint_t                   i, len, count;
+    ngx_uint_t                   i, len, last;
     ngx_buf_t                   *buf;
     ngx_http_upstream_server_t  *us;
 
-    len = 0;
+    len = 2;
     for (i = 0; i < duscf->upstream->servers->nelts; i++) {
         len += sizeof("server ") + 81;
     }
@@ -1036,7 +1036,7 @@ ngx_http_dyups_show_upstream(ngx_http_request_t *r,
     }
 
     us = duscf->upstream->servers->elts;
-    count = duscf->upstream->servers->nelts - 1;
+    last = duscf->upstream->servers->nelts - 1;
     buf->last = ngx_sprintf(buf->last, "[");
 
     for (i = 0; i < duscf->upstream->servers->nelts; i++) {
@@ -1044,7 +1044,7 @@ ngx_http_dyups_show_upstream(ngx_http_request_t *r,
                                 "\"%V\""
                                 "%s",
                                 &us[i].addrs->name,
-                                (i == count) ? "" : ",");
+                                (i == last) ? "" : ",");
     }
 
     buf->last = ngx_sprintf(buf->last, "]");
