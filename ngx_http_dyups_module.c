@@ -867,7 +867,7 @@ finish:
 static ngx_buf_t *
 ngx_http_dyups_show_list(ngx_http_request_t *r)
 {
-    ngx_uint_t                   i, len, count;
+    ngx_uint_t                   i, len, last;
     ngx_str_t                    host;
     ngx_buf_t                   *buf;
     ngx_http_dyups_srv_conf_t   *duscfs, *duscf;
@@ -875,7 +875,7 @@ ngx_http_dyups_show_list(ngx_http_request_t *r)
 
     dumcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
 
-    len = 0;
+    len = 2;
     duscfs = dumcf->dy_upstreams.elts;
     for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
 
@@ -897,7 +897,7 @@ ngx_http_dyups_show_list(ngx_http_request_t *r)
         return NULL;
     }
 
-    count = dumcf->dy_upstreams.nelts - 1;
+    last = dumcf->dy_upstreams.nelts - 1;
     buf->last = ngx_sprintf(buf->last, "[");
 
     for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
@@ -917,7 +917,7 @@ ngx_http_dyups_show_list(ngx_http_request_t *r)
                                 "\"%V\""
                                 "%s",
                                 &host,
-                                (i == count) ? "" : ",");
+                                (i == last) ? "" : ",");
     }
 
     buf->last = ngx_sprintf(buf->last, "]");
@@ -929,7 +929,7 @@ ngx_http_dyups_show_list(ngx_http_request_t *r)
 static ngx_buf_t *
 ngx_http_dyups_show_detail(ngx_http_request_t *r)
 {
-    ngx_uint_t                   i, j, len, s_count, count;
+    ngx_uint_t                   i, j, len, last, s_last;
     ngx_str_t                    host;
     ngx_buf_t                   *buf;
     ngx_http_dyups_srv_conf_t   *duscfs, *duscf;
@@ -938,7 +938,7 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
 
     dumcf = ngx_http_get_module_main_conf(r, ngx_http_dyups_module);
 
-    len = 0;
+    len = 2;
     duscfs = dumcf->dy_upstreams.elts;
     for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
 
@@ -964,7 +964,7 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
         return NULL;
     }
 
-    s_count = dumcf->dy_upstreams.nelts - 1;
+    s_last = dumcf->dy_upstreams.nelts - 1;
     buf->last = ngx_sprintf(buf->last, "[");
 
     for (i = 0; i < dumcf->dy_upstreams.nelts; i++) {
@@ -982,7 +982,7 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
         host = duscf->upstream->host;
         buf->last = ngx_sprintf(buf->last, "{\"upstream_name\":\"%V\",\"servers\":[", &host);
 
-        count = duscf->upstream->servers->nelts - 1;
+        last = duscf->upstream->servers->nelts - 1;
         us = duscf->upstream->servers->elts;
 
         for (j = 0; j < duscf->upstream->servers->nelts; j++) {
@@ -1006,10 +1006,12 @@ ngx_http_dyups_show_detail(ngx_http_request_t *r)
                                     us[j].fail_timeout,
                                     us[j].backup,
                                     us[j].down,
-                                    (j == count) ? "]" : ",");
+                                    (j == last) ? "]" : ",");
         }
-        buf->last = ngx_sprintf(buf->last, (i == s_count) ? "}]" : "},");
+        buf->last = ngx_sprintf(buf->last, (i == s_last) ? "}" : "},");
     }
+
+    buf->last = ngx_sprintf(buf->last, "]");
 
     return buf;
 }
