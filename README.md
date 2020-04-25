@@ -10,11 +10,7 @@ This module can be used to update your upstream-list without reloadding Nginx.
 * [Installation](#installation)
 * [Directives](#directives)
    * [dyups_interface](#dyups_interface)
-   * [dyups_read_msg_timeout](#dyups_read_msg_timeout)
    * [dyups_shm_zone_size](#dyups_shm_zone_size)
-   * [dyups_upstream_conf](#dyups_upstream_conf)
-   * [dyups_trylock](#dyups_trylock)
-   * [dyups_read_msg_log](#dyups_read_msg_log)
 * [restful interface](#restful-interface)
    * [GET](#get)
    * [POST](#post)
@@ -149,17 +145,6 @@ Context: `loc`
 This directive set the interface location where you can add or delete the upstream list. See the section of Interface for detail.
 
 
-### dyups_read_msg_timeout
-
-Syntax: **dyups_read_msg_timeout** `time`
-
-Default: `1s`
-
-Context: `main`
-
-This directive set the interval of workers readding the commands from share memory.
-
-
 ### dyups_shm_zone_size
 
 Syntax: **dyups_shm_zone_size** `size`
@@ -171,48 +156,10 @@ Context: `main`
 This directive set the size of share memory which used to store the commands.
 
 
-### dyups_upstream_conf
-
-Syntax: **dyups_upstream_conf** `path`
-
-Default: `none`
-
-Context: `main`
-
-This directive has been deprecated
-
-
-### dyups_trylock
-
-Syntax: **dyups_trylock** `on | off`
-
-Default: `off`
-
-Context: `main`
-
-You will get a better prefomance but it maybe not stable, and you will get a '409' when the update request conflicts with others.
-
-
-### dyups_read_msg_log
-
-Syntax: **dyups_read_msg_log** `on | off`
-
-Default: `off`
-
-Context: `main`
-
-You can enable / disable log of workers readding the commands from share memory. The log looks like:
-
-```
-2017/02/28 15:37:53 [info] 56806#0: [dyups] has 0 upstreams, 1 static, 0 deleted, all 1
-```
-
 ## restful interface
 
 ### GET
-- `/detail`         get all upstreams and their servers
 - `/list`           get the list of upstreams
-- `/upstream/name`  find the upstream by it's name
 
 ### POST
 - `/upstream/name`  update one upstream
@@ -395,7 +342,7 @@ chobits (王笑臣) wangxiaochen0@gmail.com, Alibaba Inc.
 These codes are licenced under the BSD license.
 
 ```
-Copyright (C) 2012-2018 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>, Alibaba Inc.
+Copyright (C) 2012-2020 by Zhuo Yuan (yzprofile) <yzprofiles@gmail.com>
 
 All rights reserved.
 
