@@ -55,7 +55,7 @@ file: conf/nginx.conf
 
             location / {
                 # The upstream here must be a nginx variable
-                proxy_pass http://$host;
+                proxy_pass http://$dyups_host;
             }
         }
 
