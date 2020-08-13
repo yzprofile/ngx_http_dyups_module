@@ -42,6 +42,8 @@ typedef struct {
 typedef struct {
     ngx_uint_t                           ref;
     ngx_http_upstream_init_peer_pt       init;
+    ngx_pool_t                          *pool;
+    ngx_http_upstream_rr_peers_t        *peers;
 } ngx_http_dyups_upstream_srv_conf_t;
 
 
@@ -50,9 +52,9 @@ typedef struct {
     ngx_http_dyups_upstream_srv_conf_t  *scf;
     ngx_event_get_peer_pt                get;
     ngx_event_free_peer_pt               free;
-#if (NGX_HTTP_SSL)
-    ngx_ssl_session_t                   *ssl_session;
-#endif
+    ngx_pool_t                          *pool;
+    ngx_http_upstream_rr_peers_t        *peers;
+    ngx_http_upstream_rr_peer_t         *current_peer;
 } ngx_http_dyups_ctx_t;
 
 
@@ -1161,6 +1163,7 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_buf_t *buf)
     ngx_conf_t                           cf;
     ngx_http_upstream_init_pt            init;
     ngx_http_upstream_srv_conf_t        *uscf;
+    ngx_http_upstream_rr_peers_t        *peers;
     ngx_http_dyups_upstream_srv_conf_t  *dscf;
 
     uscf = duscf->upstream;
@@ -1206,8 +1209,12 @@ ngx_dyups_add_server(ngx_http_dyups_srv_conf_t *duscf, ngx_buf_t *buf)
         return NGX_ERROR;
     }
 
+    peers = uscf->peer.data;
+
     dscf = uscf->srv_conf[ngx_http_dyups_module.ctx_index];
     dscf->init = uscf->peer.init;
+    dscf->pool = duscf->pool;
+    dscf->peers = peers;
 
     uscf->peer.init = ngx_http_dyups_init_peer;
 
@@ -1305,7 +1312,11 @@ ngx_dyups_init_upstream(ngx_http_dyups_srv_conf_t *duscf, ngx_str_t *name,
                                                ngx_http_upstream_module);
     uscfp = umcf->upstreams.elts;
 
+#if (NGX_HTTP_SSL)
+    duscf->pool = ngx_create_pool(NGX_SSL_MAX_SESSION_SIZE, ngx_cycle->log);
+#else
     duscf->pool = ngx_create_pool(512, ngx_cycle->log);
+#endif
     if (duscf->pool == NULL) {
         return NGX_ERROR;
     }
@@ -1647,6 +1658,9 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
     }
 
     ctx->scf = dscf;
+    ctx->pool = dscf->pool;
+    ctx->peers = dscf->peers;
+    ctx->current_peer = NULL;
     ctx->data = r->upstream->peer.data;
     ctx->get = r->upstream->peer.get;
     ctx->free = r->upstream->peer.free;
@@ -1918,26 +1932,67 @@ ngx_http_variable_dyups(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 
 #if (NGX_HTTP_SSL)
 
+static ngx_http_upstream_rr_peer_t*
+ngx_http_dyups_get_current_peer(ngx_peer_connection_t *pc, void *data)
+{
+    ngx_http_dyups_ctx_t         *ctx = data;
+    ngx_http_upstream_rr_peer_t  *peer;
+
+    if (ctx->current_peer) {
+        /* save peer session always come here */
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                "[dyups] current peer already exists: %V", &ctx->current_peer->name);
+        return ctx->current_peer;
+    }
+
+    if (pc->sockaddr == NULL) {
+        return NULL;
+    }
+
+    /* TODO: need to optimize when the number of peers is very large */
+    int i;
+
+    for (i = 0; i < ctx->peers->number; i++) {
+        peer = &ctx->peers->peer[i];
+        if (memcmp(pc->sockaddr->sa_data, peer->sockaddr->sa_data, 14) == 0) {
+            ctx->current_peer = peer;
+            return peer;
+        }
+    }
+
+    return NULL;
+}
+
+
 static ngx_int_t
 ngx_http_dyups_set_peer_session(ngx_peer_connection_t *pc, void *data)
 {
-    ngx_http_dyups_ctx_t  *ctx = data;
+    ngx_int_t                      rc;
+    ngx_ssl_session_t             *ssl_session;
+    ngx_http_upstream_rr_peer_t   *peer;
 
-    ngx_int_t            rc;
-    ngx_ssl_session_t   *ssl_session;
+    int             len;
+    const u_char   *p;
+    u_char          buf[NGX_SSL_MAX_SESSION_SIZE];
 
-    ssl_session = ctx->ssl_session;
+    peer = ngx_http_dyups_get_current_peer(pc, data);
+    if (peer == NULL || peer->ssl_session == NULL) {
+        return NGX_OK;
+    }
+
+    len = peer->ssl_session_len;
+    ngx_memcpy(buf, peer->ssl_session, len);
+
+    p = buf;
+    ssl_session = d2i_SSL_SESSION(NULL, &p, len);
+
     rc = ngx_ssl_set_session(pc->connection, ssl_session);
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100003L
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "set session: %p", ssl_session);
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                   "[dyups] set session: %p %d %V", peer->ssl_session, peer->ssl_session_len, &peer->name);
 
-#else
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "set session: %p:%d", ssl_session,
-                   ssl_session ? ssl_session->references : 0);
-#endif
+    /* free up extra ssl session memory */
+    ngx_ssl_free_session(ssl_session);
 
     return rc;
 }
@@ -1946,43 +2001,55 @@ ngx_http_dyups_set_peer_session(ngx_peer_connection_t *pc, void *data)
 static void
 ngx_http_dyups_save_peer_session(ngx_peer_connection_t *pc, void *data)
 {
-    ngx_http_dyups_ctx_t  *ctx = data;
+    ngx_http_dyups_ctx_t *ctx = data;
 
-    ngx_ssl_session_t   *old_ssl_session, *ssl_session;
+    int      len;
+    u_char   *p;
+    u_char   buf[NGX_SSL_MAX_SESSION_SIZE];
 
-    ssl_session = ngx_ssl_get_session(pc->connection);
+    ngx_ssl_session_t             *ssl_session;
+    ngx_http_upstream_rr_peer_t   *peer;
+
+    ssl_session = ngx_ssl_get0_session(pc->connection);
 
     if (ssl_session == NULL) {
         return;
     }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100003L
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "save session: %p", ssl_session);
+    len = i2d_SSL_SESSION(ssl_session, NULL);
 
-#else
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "save session: %p:%d", ssl_session,
-                   ssl_session->references);
-#endif
+    /* do not cache too big session */
 
-    old_ssl_session = ctx->ssl_session;
-    ctx->ssl_session = ssl_session;
-
-    if (old_ssl_session) {
-
-#if OPENSSL_VERSION_NUMBER >= 0x10100003L
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                       "old session: %p", old_ssl_session);
-
-#else
-        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                       "old session: %p:%d", old_ssl_session,
-                       old_ssl_session->references);
-#endif
-
-        ngx_ssl_free_session(old_ssl_session);
+    if (len > NGX_SSL_MAX_SESSION_SIZE) {
+        return;
     }
+
+    p = buf;
+    (void) i2d_SSL_SESSION(ssl_session, &p);
+
+    peer = ngx_http_dyups_get_current_peer(pc, data);
+
+    if (len > peer->ssl_session_len) {
+        if (peer->ssl_session) {
+            ngx_pfree(ctx->pool, peer->ssl_session);
+            peer->ssl_session = NULL;
+        }
+
+        peer->ssl_session = ngx_pcalloc(ctx->pool, len);
+        if (peer->ssl_session == NULL) {
+            peer->ssl_session_len = 0;
+            return;
+        }
+
+        peer->ssl_session_len = len;
+    }
+
+    ngx_memcpy(peer->ssl_session, buf, len);
+
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                   "[dyups] save session: %p %d %V", peer->ssl_session, peer->ssl_session_len, &peer->name);
+
+    return;
 }
 
 #endif
