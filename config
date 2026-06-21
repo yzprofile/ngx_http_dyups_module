@@ -24,7 +24,7 @@ if test -n "$ngx_module_link"; then
     ngx_module_deps="$HTTP_DYUPS_DEPS"
     . auto/module
 else
-    if $HTTP_AUX_FILTER_MODULES | grep "ngx_http_lua_module" > /dev/null; then
+    if test -n "$(echo $HTTP_AUX_FILTER_MODULES | grep ngx_http_lua_module)" > /dev/null; then
         dyups_lua
     fi
     HTTP_MODULES="$HTTP_MODULES ngx_http_dyups_module"
