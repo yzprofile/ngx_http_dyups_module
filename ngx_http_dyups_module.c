@@ -132,9 +132,9 @@ static ngx_int_t ngx_http_dyups_add_vars(ngx_conf_t *cf);
 static ngx_int_t ngx_http_dyups_reload();
 
 #if (NGX_HTTP_SSL)
-static ngx_int_t ngx_http_dyups_set_peer_session(ngx_peer_connection_t *pc,
+static ngx_int_t ngx_http_dyups_empty_set_session(ngx_peer_connection_t *pc,
     void *data);
-static void ngx_http_dyups_save_peer_session(ngx_peer_connection_t *pc,
+static void ngx_http_dyups_empty_save_session(ngx_peer_connection_t *pc,
     void *data);
 #endif
 
@@ -1656,8 +1656,8 @@ ngx_http_dyups_init_peer(ngx_http_request_t *r,
     r->upstream->peer.free = ngx_http_dyups_free_peer;
 
 #if (NGX_HTTP_SSL)
-    r->upstream->peer.set_session = ngx_http_dyups_set_peer_session;
-    r->upstream->peer.save_session = ngx_http_dyups_save_peer_session;
+    r->upstream->peer.set_session = ngx_http_dyups_empty_set_session;
+    r->upstream->peer.save_session = ngx_http_dyups_empty_save_session;
 #endif
 
     cln = ngx_pool_cleanup_add(r->pool, 0);
@@ -1919,70 +1919,16 @@ ngx_http_variable_dyups(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 #if (NGX_HTTP_SSL)
 
 static ngx_int_t
-ngx_http_dyups_set_peer_session(ngx_peer_connection_t *pc, void *data)
+ngx_http_dyups_empty_set_session(ngx_peer_connection_t *pc, void *data)
 {
-    ngx_http_dyups_ctx_t  *ctx = data;
-
-    ngx_int_t            rc;
-    ngx_ssl_session_t   *ssl_session;
-
-    ssl_session = ctx->ssl_session;
-    rc = ngx_ssl_set_session(pc->connection, ssl_session);
-
-#if OPENSSL_VERSION_NUMBER >= 0x10100003L
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "set session: %p", ssl_session);
-
-#else
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "set session: %p:%d", ssl_session,
-                   ssl_session ? ssl_session->references : 0);
-#endif
-
-    return rc;
+    return NGX_OK;
 }
 
 
 static void
-ngx_http_dyups_save_peer_session(ngx_peer_connection_t *pc, void *data)
+ngx_http_dyups_empty_save_session(ngx_peer_connection_t *pc, void *data)
 {
-    ngx_http_dyups_ctx_t  *ctx = data;
-
-    ngx_ssl_session_t   *old_ssl_session, *ssl_session;
-
-    ssl_session = ngx_ssl_get_session(pc->connection);
-
-    if (ssl_session == NULL) {
-        return;
-    }
-
-#if OPENSSL_VERSION_NUMBER >= 0x10100003L
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "save session: %p", ssl_session);
-
-#else
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                   "save session: %p:%d", ssl_session,
-                   ssl_session->references);
-#endif
-
-    old_ssl_session = ctx->ssl_session;
-    ctx->ssl_session = ssl_session;
-
-    if (old_ssl_session) {
-
-#if OPENSSL_VERSION_NUMBER >= 0x10100003L
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                       "old session: %p", old_ssl_session);
-
-#else
-        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                       "old session: %p:%d", old_ssl_session,
-                       old_ssl_session->references);
-#endif
-
-        ngx_ssl_free_session(old_ssl_session);
-    }
+    return;
 }
 
 #endif
