@@ -336,7 +336,7 @@ To make the tests pass, you should also install lua-nginx-module and patched ups
 
 ## Author
 
-yzprofile (袁茁) yzprofile@gmail.com
+yzprofile (袁茁) yzprofiles@gmail.com
 
 chobits (王笑臣) wangxiaochen0@gmail.com, Alibaba Inc.
 
