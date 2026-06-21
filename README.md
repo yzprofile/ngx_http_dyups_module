@@ -1,5 +1,5 @@
 ## Description
-This module can be used to update your upstream-list without reloadding Nginx.
+This module can be used to update your upstream-list without reloading Nginx.
 
 
 ## Table of Contents
